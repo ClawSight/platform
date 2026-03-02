@@ -26,11 +26,16 @@
   <script>
     const SUPABASE_URL = 'https://kfibmwbwdcejrsuahbps.supabase.co';
     const SUPABASE_KEY = 'sb_publishable_UgtXVptJpAWZMZAOgp1rGA_e2OgLuaC'; // Public Anon Key
-    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
     async function handleLogin() {
       const email = document.getElementById('email').value;
-      const { error } = await supabase.auth.signInWithOtp({ email });
+      const { error } = await supabaseClient.auth.signInWithOtp({
+        email,
+        options: {
+          emailRedirectTo: `${window.location.origin}/keys.html`
+        }
+      });
       if (error) alert(error.message);
       else {
         document.getElementById('login-form').classList.add('hidden');
