@@ -29,6 +29,31 @@ const io = new Server(server, {
 // Structure: { agentId: { ...agentData, tenantId: 'uuid' } }
 let activeAgents = {};
 
+function buildDemoAgent(tenantId) {
+  const now = Date.now();
+  return {
+    id: `demo-${tenantId.slice(0, 8)}`,
+    name: 'Demo Revenue Bot',
+    tenantId,
+    lastHeartbeat: now,
+    status: 'working',
+    demo: true,
+    logs: [
+      { timestamp: now - 120000, message: 'Booting up demo agent…' },
+      { timestamp: now - 90000, message: 'Monitoring OpenAI spend (45¢)' },
+      { timestamp: now - 60000, message: 'Detected loop, auto-paused sequence.' },
+      { timestamp: now - 30000, message: 'Restarted after human approval.' },
+      { timestamp: now - 5000, message: 'Streaming new trades…' }
+    ],
+    metrics: {
+      cost: 0.2311,
+      revenue: 3.45,
+      tokens: 1820,
+      profitRun: '+$3.22 today'
+    }
+  };
+}
+
 console.log("🔒 ClawSight Server Starting...");
 
 // --- API ENDPOINTS ---
@@ -159,7 +184,10 @@ io.on('connection', (socket) => {
 
   // If Dashboard, send initial state (Filtered by Tenant)
   if (role === 'dashboard' || role === 'admin') {
-    const tenantAgents = Object.values(activeAgents).filter(a => a.tenantId === tenantId || tenantId === 'legacy_admin');
+    let tenantAgents = Object.values(activeAgents).filter(a => a.tenantId === tenantId || tenantId === 'legacy_admin');
+    if (tenantAgents.length === 0 && role === 'dashboard') {
+      tenantAgents = [buildDemoAgent(tenantId)];
+    }
     socket.emit('init', tenantAgents);
   }
 
