@@ -8,7 +8,13 @@
 </head>
 <body class="bg-gray-900 text-white font-mono h-screen flex flex-col p-8">
 
-  <h1 class="text-2xl font-bold text-emerald-400 mb-8">Manage API Keys</h1>
+  <header class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
+    <div>
+      <h1 class="text-2xl font-bold text-emerald-400">Manage API Keys</h1>
+      <p id="need-key-banner" class="text-sm text-gray-400 mt-2 hidden">You haven’t connected a dashboard yet. Create a key, then <a href="/" class="text-emerald-400 underline">open the Mission Control dashboard</a>.</p>
+    </div>
+    <a href="/" class="inline-flex items-center justify-center gap-2 bg-gray-800 border border-gray-700 hover:border-emerald-400 px-4 py-2 rounded text-sm">← Back to Dashboard</a>
+  </header>
 
   <div class="mb-8">
     <button onclick="createKey()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 px-4 rounded">Create New Key</button>
@@ -19,7 +25,10 @@
       <h3 class="text-xl font-bold mb-4 text-white">New API Key Created</h3>
       <p class="text-gray-400 mb-2">Copy this now. You won't see it again.</p>
       <div class="bg-black p-4 rounded border border-gray-600 font-mono text-emerald-400 break-all mb-4" id="new-key-display">...</div>
-      <button onclick="location.reload()" class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded">Done</button>
+      <div class="flex flex-col sm:flex-row gap-3">
+        <button onclick="copyNewKey()" class="flex-1 bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded">Copy Key</button>
+        <a href="/" class="flex-1 text-center bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded">Open Dashboard</a>
+      </div>
     </div>
   </div>
 
@@ -43,6 +52,12 @@
     const SUPABASE_URL = 'https://kfibmwbwdcejrsuahbps.supabase.co';
     const SUPABASE_KEY = 'sb_publishable_UgtXVptJpAWZMZAOgp1rGA_e2OgLuaC';
     const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    const needKeyBanner = document.getElementById('need-key-banner');
+    let latestKey = null;
+
+    if (new URLSearchParams(window.location.search).get('needKey')) {
+      needKeyBanner.classList.remove('hidden');
+    }
 
     async function handleMagicLink() {
       if (window.location.hash.includes('access_token=')) {
@@ -87,8 +102,16 @@
       });
       const data = await res.json();
       if (data.key) {
+        latestKey = data.key;
         document.getElementById('new-key-display').textContent = data.key;
         document.getElementById('new-key-modal').classList.remove('hidden');
+      }
+    }
+
+    function copyNewKey() {
+      if (!latestKey) return;
+      if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(latestKey).then(() => alert('Key copied. Paste it into the dashboard prompt.'));
       }
     }
 

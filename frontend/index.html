@@ -45,6 +45,7 @@
     <div class="flex gap-4 text-sm">
       <button onclick="showTab('dashboard')" id="tab-dashboard" class="text-emerald-400 font-bold border-b-2 border-emerald-400 pb-1">DASHBOARD</button>
       <button onclick="showTab('setup')" id="tab-setup" class="text-gray-400 hover:text-white transition-colors pb-1">SETUP GUIDE</button>
+      <a href="/keys.html" class="text-gray-400 hover:text-emerald-400 transition-colors pb-1">API KEYS</a>
       <button onclick="logout()" class="text-red-400 hover:text-red-300 transition-colors pb-1">LOGOUT</button>
     </div>
   </header>
@@ -165,6 +166,12 @@
 
     if (window.location.hash.includes('access_token=')) {
       window.location.replace(`/keys.html${window.location.hash}`);
+      return;
+    }
+
+    if (!apiKey) {
+      window.location.replace('/keys.html?needKey=1');
+      return;
     }
 
     const modalEl = document.getElementById('key-modal');
