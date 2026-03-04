@@ -2,9 +2,9 @@ const io = require('socket.io-client');
 const { v4: uuidv4 } = require('uuid');
 
 const AGENT_ID = process.env.AGENT_ID || `agent-${uuidv4().substring(0, 8)}`;
-const SERVER_URL = process.env.SERVER_URL || 'https://agentwatch-dashboard.onrender.com';
+const SERVER_URL = process.env.SERVER_URL || 'https://app.clawsight.org';
 
-console.log(`Starting AgentWatch SDK for agent: ${AGENT_ID} -> Connecting to ${SERVER_URL}`);
+console.log(`Starting ClawSight SDK for agent: ${AGENT_ID} -> Connecting to ${SERVER_URL}`);
 
 const socket = io(SERVER_URL);
 
@@ -23,7 +23,7 @@ const tasks = [
 ];
 
 socket.on('connect', () => {
-  console.log('Connected to AgentWatch Server!');
+  console.log('Connected to ClawSight!');
   
   // Register Agent
   socket.emit('register-agent', {

@@ -2,7 +2,7 @@
 
 **Mission Control for Autonomous Agents.**
 
-[Live Demo](https://agentwatch-dashboard.onrender.com) · [Documentation](https://clawsight.github.io) · [Report Bug](https://github.com/ClawSight/platform/issues)
+[Live Demo](https://app.clawsight.org) · [Documentation](https://github.com/ClawSight/platform#readme) · [Report Bug](https://github.com/ClawSight/platform/issues)
 
 ---
 
@@ -28,16 +28,16 @@ No complex observability stack. No Datadog. Just 3 lines of code.
 
 #### 1. Install the SDK
 ```bash
-npm install clawsight-client
+npm install clawsight
 ```
 
 #### 2. Add to your Agent
 ```javascript
-const monitor = require('clawsight-client');
+const monitor = require('clawsight');
 
 // Connect to your dashboard
 const watcher = monitor({
-  server: 'https://your-dashboard-url.onrender.com',
+  server: 'https://app.clawsight.org',
   token: 'YOUR_SECRET_KEY'
 });
 
@@ -66,7 +66,7 @@ cd platform/backend
 npm install
 
 # Run
-export AGENTWATCH_API_KEY="secret-key-123"
+export CLAWSIGHT_API_KEY="secret-key-123"
 node server.js
 ```
 
