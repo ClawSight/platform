@@ -30,7 +30,7 @@
       <input id="api-key-input" type="text" placeholder="ck_live_..." class="w-full bg-gray-800 border border-gray-700 rounded px-4 py-3 font-mono text-sm focus:border-emerald-500 focus:outline-none text-white" />
       <div class="flex flex-col sm:flex-row gap-3 mt-6 text-sm font-bold">
         <button onclick="window.open('/keys.html', '_blank')" class="flex-1 border border-gray-700 text-gray-300 px-4 py-3 rounded hover:border-emerald-400 hover:text-white transition">Get an API Key</button>
-        <button onclick="saveApiKey()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-3 rounded transition">Save & Continue</button>
+        <button type="button" onclick="saveApiKey()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-3 rounded transition">Save & Continue</button>
       </div>
       <p id="key-modal-error" class="text-red-400 text-xs mt-4 hidden">Enter a valid key to continue.</p>
     </div>
