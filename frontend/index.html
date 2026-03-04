@@ -171,17 +171,16 @@
         return;
       }
 
-      if (!apiKey) {
-        window.location.replace('/keys.html?needKey=1');
-        return;
-      }
-
       // Modal Logic
       const modalEl = document.getElementById('key-modal');
       const keyInput = document.getElementById('api-key-input');
       const errorEl = document.getElementById('key-modal-error');
 
-      initSocket();
+      if (!apiKey) {
+        openKeyModal();
+      } else {
+        initSocket();
+      }
 
     setApiKeyDisplay();
 
