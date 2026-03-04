@@ -159,30 +159,29 @@
   </footer>
 
   <script>
-    // --- APP LOGIC ---
-    let socket;
-    let agents = {};
-    let apiKey = localStorage.getItem('clawsight_api_key');
+    (() => {
+      // --- APP LOGIC ---
+      let socket;
+      let agents = {};
+      let apiKey = localStorage.getItem('clawsight_api_key');
 
-    // Handle Redirects First
-    if (window.location.hash.includes('access_token=')) {
-      window.location.replace(`/keys.html${window.location.hash}`);
-    } else if (!apiKey) {
-      window.location.replace('/keys.html?needKey=1');
-    }
+      // Handle Redirects First
+      if (window.location.hash.includes('access_token=')) {
+        window.location.replace(`/keys.html${window.location.hash}`);
+        return;
+      }
 
-    // Modal Logic
-    const modalEl = document.getElementById('key-modal');
-    const keyInput = document.getElementById('api-key-input');
-    const errorEl = document.getElementById('key-modal-error');
+      if (!apiKey) {
+        window.location.replace('/keys.html?needKey=1');
+        return;
+      }
 
-    // Only init if we have a key (and aren't redirecting)
-    if (apiKey) {
+      // Modal Logic
+      const modalEl = document.getElementById('key-modal');
+      const keyInput = document.getElementById('api-key-input');
+      const errorEl = document.getElementById('key-modal-error');
+
       initSocket();
-    } else {
-      // Allow modal usage if redirect failed or just in case
-      // openKeyModal(); // Actually, we redirected above, so this is fallback.
-    }
 
     setApiKeyDisplay();
 
@@ -440,6 +439,7 @@ watcher.log('Hello World', 'working');`;
       navigator.clipboard.writeText(code);
       alert("Code copied!");
     };
+    })();
   </script>
   <script defer src="https://counter.dev/script.js" data-id="clawsight-app" data-utcoffset="0"></script>
 </body>
