@@ -176,13 +176,7 @@
       const keyInput = document.getElementById('api-key-input');
       const errorEl = document.getElementById('key-modal-error');
 
-      if (!apiKey) {
-        openKeyModal();
-      } else {
-        initSocket();
-      }
-
-    setApiKeyDisplay();
+      initSocket();
 
     keyInput?.addEventListener('keydown', (evt) => {
       if (evt.key === 'Enter') saveApiKey();
