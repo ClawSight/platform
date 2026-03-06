@@ -5,6 +5,7 @@
   <title>ClawSight - Mission Control</title>
   <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <!-- Favicon (Eyes Emoji) -->
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>👀</text></svg>">
   <style>
@@ -160,48 +161,133 @@
 
   <script>
     (() => {
-      // --- APP LOGIC ---
+      // --- CONFIG ---
+      const SUPABASE_URL = 'https://kfibmwbwdcejrsuahbps.supabase.co';
+      const SUPABASE_KEY = 'sb_publishable_UgtXVptJpAWZMZAOgp1rGA_e2OgLuaC';
+      const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+      // --- APP STATE ---
       let socket;
       let agents = {};
       let apiKey = localStorage.getItem('clawsight_api_key');
+      let isNewUser = false;
 
-      // Auto-provisioning now happens on /keys during login, so just attempt to connect.
-      if (apiKey) {
-        initSocket();
-      } else {
+      // --- DOM REFS ---
+      const modalEl = document.getElementById('key-modal');
+      const keyInput = document.getElementById('api-key-input');
+      const errorEl = document.getElementById('key-modal-error');
+
+      // --- BOOT SEQUENCE ---
+      boot();
+
+      async function boot() {
         const statusEl = document.getElementById('connection-status');
-        if (statusEl) {
-          statusEl.textContent = 'No API key stored. Visit /keys to create one.';
-          statusEl.className = 'text-xs text-yellow-400 bg-gray-900 px-2 py-1 rounded border border-yellow-600';
+
+        // 0. Handle magic link redirect (access_token in hash)
+        if (window.location.hash.includes('access_token=')) {
+          statusEl.textContent = 'Completing login...';
+          const params = new URLSearchParams(window.location.hash.substring(1));
+          const access_token = params.get('access_token');
+          const refresh_token = params.get('refresh_token');
+          if (access_token && refresh_token) {
+            await supabaseClient.auth.setSession({ access_token, refresh_token });
+            // Clear the hash and force fresh boot with the new session
+            window.history.replaceState({}, document.title, window.location.pathname);
+            apiKey = null;
+            localStorage.removeItem('clawsight_api_key');
+            // Fall through to session check below to auto-provision
+          }
+        }
+
+        // 1. If we have a cached API key, try connecting immediately
+        if (apiKey) {
+          initSocket();
+          return;
+        }
+
+        // 2. No API key — check if user has a Supabase session
+        statusEl.textContent = 'Checking session...';
+        statusEl.className = 'text-xs text-yellow-400 bg-gray-900 px-2 py-1 rounded border border-yellow-600';
+
+        const { data: { session } } = await supabaseClient.auth.getSession();
+
+        if (!session) {
+          // No session, no key — redirect to login
+          window.location.href = '/login.html';
+          return;
+        }
+
+        // 3. Session exists but no API key — auto-provision one
+        statusEl.textContent = 'Provisioning session key...';
+        try {
+          const res = await fetch('/api/dashboard-key', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${session.access_token}` }
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.key) {
+              apiKey = data.key;
+              localStorage.setItem('clawsight_api_key', apiKey);
+            }
+          }
+        } catch (e) {
+          console.error('Failed to provision dashboard key:', e);
+        }
+
+        if (!apiKey) {
+          // Provisioning failed — show manual key entry
+          openKeyModal();
+          return;
+        }
+
+        // 4. Check if new or returning user to pick default view
+        try {
+          const statusRes = await fetch('/api/user/status', {
+            headers: { Authorization: `Bearer ${session.access_token}` }
+          });
+          if (statusRes.ok) {
+            const userStatus = await statusRes.json();
+            isNewUser = userStatus.isNew || !userStatus.hasKeys;
+          }
+        } catch (e) {
+          // Non-critical, default to dashboard view
+        }
+
+        initSocket();
+
+        // New users see the setup guide first
+        if (isNewUser) {
+          showTab('setup');
         }
       }
 
-    keyInput?.addEventListener('keydown', (evt) => {
-      if (evt.key === 'Enter') saveApiKey();
-    });
+      keyInput?.addEventListener('keydown', (evt) => {
+        if (evt.key === 'Enter') saveApiKey();
+      });
 
-    function openKeyModal() {
-      modalEl.classList.remove('hidden');
-      setTimeout(() => keyInput?.focus(), 100);
-    }
-
-    function closeKeyModal() {
-      modalEl.classList.add('hidden');
-      errorEl.classList.add('hidden');
-    }
-
-    function saveApiKey() {
-      const value = keyInput.value.trim();
-      if (!value || value.length < 12) {
-        errorEl.classList.remove('hidden');
-        return;
+      function openKeyModal() {
+        modalEl.classList.remove('hidden');
+        setTimeout(() => keyInput?.focus(), 100);
       }
-      apiKey = value;
-      localStorage.setItem('clawsight_api_key', apiKey);
-      setApiKeyDisplay();
-      closeKeyModal();
-      initSocket();
-    }
+
+      function closeKeyModal() {
+        modalEl.classList.add('hidden');
+        errorEl.classList.add('hidden');
+      }
+
+      function saveApiKey() {
+        const value = keyInput.value.trim();
+        if (!value || value.length < 12) {
+          errorEl.classList.remove('hidden');
+          return;
+        }
+        apiKey = value;
+        localStorage.setItem('clawsight_api_key', apiKey);
+        setApiKeyDisplay();
+        closeKeyModal();
+        initSocket();
+      }
 
     function setApiKeyDisplay() {
       const el = document.getElementById('display-api-key');
@@ -400,7 +486,11 @@
       document.getElementById(`tab-${tabName}`).classList.add('text-emerald-400', 'border-b-2', 'border-emerald-400');
       document.getElementById(`tab-${tabName}`).classList.remove('text-gray-400');
     };
-    window.logout = () => { localStorage.removeItem('clawsight_api_key'); window.location.reload(); };
+    window.logout = async () => {
+      localStorage.removeItem('clawsight_api_key');
+      await supabaseClient.auth.signOut();
+      window.location.href = '/login.html';
+    };
     window.killAgent = (id) => { if (confirm(`Terminate agent ${id}?`)) socket.emit('kill-agent', id); };
     window.shareAgent = (id) => {
       fetch('/api/share', {

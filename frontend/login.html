@@ -28,12 +28,22 @@
     const SUPABASE_KEY = 'sb_publishable_UgtXVptJpAWZMZAOgp1rGA_e2OgLuaC'; // Public Anon Key
     const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+    // If already logged in, skip to dashboard
+    async function checkExistingSession() {
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      if (session) {
+        window.location.href = '/';
+        return;
+      }
+    }
+    checkExistingSession();
+
     async function handleLogin() {
       const email = document.getElementById('email').value;
       const { error } = await supabaseClient.auth.signInWithOtp({
         email,
         options: {
-          emailRedirectTo: `${window.location.origin}/keys.html`
+          emailRedirectTo: `${window.location.origin}/`
         }
       });
       if (error) alert(error.message);

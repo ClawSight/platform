@@ -56,6 +56,33 @@ function buildDemoAgent(tenantId) {
 
 console.log("🔒 ClawSight Server Starting...");
 
+// --- HELPERS ---
+
+async function getOrCreateTenant(userId) {
+  // Check for existing tenant
+  const { data: existing } = await supabase
+    .from('user_tenants')
+    .select('tenant_id')
+    .eq('user_id', userId)
+    .single();
+
+  if (existing) return existing.tenant_id;
+
+  // Create a new tenant for this user
+  const tenantId = uuidv4();
+  const { error: insertError } = await supabase
+    .from('user_tenants')
+    .insert({ user_id: userId, tenant_id: tenantId });
+
+  if (insertError) {
+    console.error('Failed to create tenant:', insertError.message);
+    return null;
+  }
+
+  console.log(`🆕 New tenant created: ${tenantId} for user ${userId}`);
+  return tenantId;
+}
+
 // --- API ENDPOINTS ---
 
 // Create API Key (Called by Dashboard)
@@ -69,9 +96,9 @@ app.post('/api/keys', async (req, res) => {
   const { data: { user }, error } = await supabase.auth.getUser(token);
   if (error || !user) return res.status(401).json({ error: "Invalid User" });
 
-  // 2. Get User's Tenant
-  const { data: userTenant } = await supabase.from('user_tenants').select('tenant_id').eq('user_id', user.id).single();
-  if (!userTenant) return res.status(400).json({ error: "No Tenant Found" });
+  // 2. Get or Create User's Tenant
+  const tenantId = await getOrCreateTenant(user.id);
+  if (!tenantId) return res.status(500).json({ error: "Failed to resolve tenant" });
 
   // 3. Generate Key
   const rawKey = 'ck_live_' + uuidv4().replace(/-/g, '');
@@ -80,7 +107,7 @@ app.post('/api/keys', async (req, res) => {
 
   // 4. Save to DB
   const { error: dbError } = await supabase.from('api_keys').insert({
-    tenant_id: userTenant.tenant_id,
+    tenant_id: tenantId,
     key_hash: keyHash,
     key_prefix: keyPrefix,
     name: req.body.name || 'Agent Key'
@@ -135,13 +162,13 @@ app.post('/api/dashboard-key', async (req, res) => {
   const { data: { user }, error } = await supabase.auth.getUser(token);
   if (error || !user) return res.status(401).json({ error: "Invalid User" });
 
-  const { data: userTenant } = await supabase.from('user_tenants').select('tenant_id').eq('user_id', user.id).single();
-  if (!userTenant) return res.status(400).json({ error: "No Tenant Found" });
+  const tenantId = await getOrCreateTenant(user.id);
+  if (!tenantId) return res.status(500).json({ error: "Failed to resolve tenant" });
 
   // Remove prior dashboard keys for cleanliness
   await supabase.from('api_keys')
     .delete()
-    .eq('tenant_id', userTenant.tenant_id)
+    .eq('tenant_id', tenantId)
     .eq('name', 'Dashboard Session Key');
 
   const rawKey = 'ck_live_' + uuidv4().replace(/-/g, '');
@@ -149,7 +176,7 @@ app.post('/api/dashboard-key', async (req, res) => {
   const keyPrefix = rawKey.slice(0, 12);
 
   const { error: insertError } = await supabase.from('api_keys').insert({
-    tenant_id: userTenant.tenant_id,
+    tenant_id: tenantId,
     key_hash: keyHash,
     key_prefix: keyPrefix,
     name: 'Dashboard Session Key',
@@ -159,6 +186,31 @@ app.post('/api/dashboard-key', async (req, res) => {
   if (insertError) return res.status(500).json({ error: insertError.message });
 
   res.json({ key: rawKey });
+});
+
+// Check if user is new or returning (has agents/keys)
+app.get('/api/user/status', async (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return res.status(401).json({ error: "Missing Auth" });
+
+  const token = authHeader.replace('Bearer ', '');
+  const { data: { user }, error } = await supabase.auth.getUser(token);
+  if (error || !user) return res.status(401).json({ error: "Invalid User" });
+
+  const { data: userTenant } = await supabase.from('user_tenants').select('tenant_id').eq('user_id', user.id).single();
+
+  if (!userTenant) {
+    return res.json({ isNew: true, hasKeys: false });
+  }
+
+  const { data: keys } = await supabase.from('api_keys')
+    .select('id')
+    .eq('tenant_id', userTenant.tenant_id)
+    .neq('name', 'Dashboard Session Key')
+    .limit(1);
+
+  const hasAgentKeys = keys && keys.length > 0;
+  return res.json({ isNew: false, hasKeys: hasAgentKeys });
 });
 
 // --- REALTIME SOCKETS ---
