@@ -298,7 +298,7 @@
     function initSocket() {
       if (!apiKey) return;
       const serverUrl = window.location.origin;
-      socket = io(serverUrl, { auth: { token: apiKey }, reconnection: true });
+      socket = io(serverUrl, { auth: { token: apiKey }, reconnection: false });
       const statusEl = document.getElementById('connection-status');
 
       socket.on('connect', () => {
@@ -306,11 +306,38 @@
         statusEl.className = 'text-xs text-emerald-400 bg-gray-900 px-2 py-1 rounded border border-emerald-900';
       });
 
-      socket.on('connect_error', (err) => {
-        statusEl.textContent = 'Auth Error';
+      socket.on('connect_error', async (err) => {
+        statusEl.textContent = 'Key expired — refreshing...';
+        statusEl.className = 'text-xs text-yellow-400 bg-gray-900 px-2 py-1 rounded border border-yellow-600';
+        socket.disconnect();
+
+        // Try to re-provision a fresh dashboard key from the Supabase session
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        if (session) {
+          try {
+            const res = await fetch('/api/dashboard-key', {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${session.access_token}` }
+            });
+            if (res.ok) {
+              const data = await res.json();
+              if (data.key) {
+                apiKey = data.key;
+                localStorage.setItem('clawsight_api_key', apiKey);
+                initSocket(); // Retry with fresh key
+                return;
+              }
+            }
+          } catch (e) {
+            console.error('Failed to re-provision key:', e);
+          }
+        }
+
+        // Session is also gone — redirect to login
+        statusEl.textContent = 'Session expired';
         statusEl.className = 'text-xs text-red-400 bg-gray-900 px-2 py-1 rounded border border-red-500';
-        alert('Unable to authenticate this API key. Double-check in /keys.');
-        logout(true);
+        localStorage.removeItem('clawsight_api_key');
+        window.location.href = '/login.html';
       });
 
       socket.on('agent-update', (agent) => {
