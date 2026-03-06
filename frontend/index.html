@@ -165,16 +165,15 @@
       let agents = {};
       let apiKey = localStorage.getItem('clawsight_api_key');
 
-      // Handle Redirects First
+      if (!apiKey) {
+        window.location.replace('/keys.html?needKey=1');
+        return;
+      }
+
       if (window.location.hash.includes('access_token=')) {
         window.location.replace(`/keys.html${window.location.hash}`);
         return;
       }
-
-      // Modal Logic
-      const modalEl = document.getElementById('key-modal');
-      const keyInput = document.getElementById('api-key-input');
-      const errorEl = document.getElementById('key-modal-error');
 
       initSocket();
 

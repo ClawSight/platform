@@ -55,8 +55,10 @@
     const needKeyBanner = document.getElementById('need-key-banner');
     let latestKey = null;
     const loggedInViaMagicLink = window.location.hash.includes('access_token=');
+    const needKeyQuery = new URLSearchParams(window.location.search).get('needKey');
+    const shouldAutoProvision = loggedInViaMagicLink || needKeyQuery;
 
-    if (new URLSearchParams(window.location.search).get('needKey')) {
+    if (needKeyQuery) {
       needKeyBanner.classList.remove('hidden');
     }
 
@@ -90,7 +92,7 @@
         window.location.href = '/login.html';
         return;
       }
-      if (loggedInViaMagicLink) {
+      if (shouldAutoProvision) {
         await provisionDashboardKey(session.access_token);
         window.location.replace('/');
         return;
