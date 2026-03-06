@@ -239,7 +239,8 @@ io.use(async (socket, next) => {
     if (candidates) {
       for (const keyRecord of candidates) {
         if (await argon2.verify(keyRecord.key_hash, token)) {
-          socket.user = { role: 'agent', tenantId: keyRecord.tenant_id };
+          const role = keyRecord.name === 'Dashboard Session Key' ? 'dashboard' : 'agent';
+          socket.user = { role, tenantId: keyRecord.tenant_id };
           return next();
         }
       }
