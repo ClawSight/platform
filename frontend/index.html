@@ -2,243 +2,42 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>ClawSight - Mission Control</title>
+  <title>ClawSight</title>
   <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>👀</text></svg>">
-  <style>
-    ::-webkit-scrollbar { width: 8px; }
-    ::-webkit-scrollbar-track { background: #1f2937; }
-    ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
-    ::-webkit-scrollbar-thumb:hover { background: #6b7280; }
-  </style>
 </head>
-<body class="bg-gray-900 text-white font-mono h-screen overflow-hidden flex flex-col">
-
-  <!-- Header -->
-  <header class="bg-gray-800 border-b border-gray-700 p-4 flex justify-between items-center shadow-md z-10">
-    <div class="flex items-center gap-4">
-      <h1 class="text-2xl font-bold text-emerald-400 tracking-wider">CLAWSIGHT</h1>
-      <span id="connection-status" class="text-xs text-gray-500 bg-gray-900 px-2 py-1 rounded border border-gray-700">Connecting...</span>
-    </div>
-    <div class="flex gap-4 text-sm items-center">
-      <button onclick="copyKey()" id="copy-btn" class="bg-gray-700 hover:bg-gray-600 text-white px-3 py-1 rounded text-xs hidden">🔑 COPY API KEY</button>
-      <a href="/keys.html" class="text-gray-400 hover:text-white transition-colors pb-1">MANAGE KEYS</a>
-      <a href="https://github.com/ClawSight/platform" target="_blank" class="text-gray-400 hover:text-emerald-400 transition-colors pb-1">DOCS</a>
-      <button onclick="logout()" class="text-red-400 hover:text-red-300 transition-colors pb-1 ml-2">LOGOUT</button>
-    </div>
-  </header>
-
-  <!-- Global Analytics Bar -->
-  <div id="analytics-bar" class="bg-gray-800 border-b border-gray-700 p-4 grid grid-cols-4 gap-4 text-center shadow-sm z-10 hidden">
-    <div>
-      <div class="text-xs text-gray-500 uppercase font-bold">Active Bots</div>
-      <div class="text-xl font-bold text-white" id="stat-active">0</div>
-    </div>
-    <div class="border-l border-gray-700">
-      <div class="text-xs text-gray-500 uppercase font-bold">Revenue</div>
-      <div class="text-xl font-bold text-emerald-400" id="stat-revenue">$0.00</div>
-    </div>
-    <div class="border-l border-gray-700">
-      <div class="text-xs text-gray-500 uppercase font-bold">Cost</div>
-      <div class="text-xl font-bold text-red-400" id="stat-cost">-$0.00</div>
-    </div>
-    <div class="border-l border-gray-700">
-      <div class="text-xs text-gray-500 uppercase font-bold">Profit</div>
-      <div class="text-xl font-bold text-gray-400" id="stat-profit">$0.00</div>
-    </div>
-  </div>
-
-  <!-- Main Content Area -->
-  <main class="flex-1 overflow-y-auto p-6 relative pb-20">
-    <!-- Empty State -->
-    <div id="empty-state" class="hidden h-full flex flex-col items-center justify-center text-gray-500">
-      <h3 class="text-xl font-bold mb-2">No Active Agents</h3>
-      <p class="mb-6">Connect your bot using the API Key.</p>
-      <code class="bg-black p-2 rounded text-sm mb-4">npm install clawsight</code>
-    </div>
-
-    <!-- Agent Grid -->
-    <div id="agent-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-8"></div>
-    
-    <div id="history-section" class="hidden border-t border-gray-700 pt-8">
-      <h3 class="text-sm font-bold text-gray-500 uppercase tracking-widest mb-4">Terminated History</h3>
-      <div id="agent-grid-history" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
-    </div>
-  </main>
+<body class="bg-gray-900 text-white font-mono h-screen p-6">
+  <h1 class="text-2xl font-bold text-emerald-400 mb-6">ClawSight Legacy</h1>
+  <div id="status" class="text-xs text-gray-500 mb-4">Connecting...</div>
+  <div id="grid" class="grid grid-cols-1 md:grid-cols-3 gap-4"></div>
 
   <script>
-    const SUPABASE_URL = 'https://kfibmwbwdcejrsuahbps.supabase.co';
-    const SUPABASE_KEY = 'sb_publishable_UgtXVptJpAWZMZAOgp1rGA_e2OgLuaC';
-    const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-    
-    let socket;
+    const socket = io();
+    const grid = document.getElementById('grid');
     let agents = {};
-    let activeKey = null;
 
-    async function boot() {
-      // 1. Check for Magic Link Hash
-      if (window.location.hash.includes('access_token=')) {
-        const { data, error } = await supabaseClient.auth.getSession(); // Parses hash auto
-        if (data.session) {
-           window.history.replaceState({}, document.title, window.location.pathname); // Clear hash
-           await autoProvisionKey(data.session.access_token);
-           return;
-        }
-      }
+    socket.on('connect', () => document.getElementById('status').textContent = 'Connected');
+    
+    socket.on('agent-update', (agent) => {
+      agents[agent.id] = agent;
+      render();
+    });
 
-      // 2. Check LocalStorage
-      const localKey = localStorage.getItem('clawsight_api_key');
-      if (localKey) {
-        connect(localKey);
-        return;
-      }
-
-      // 3. Check Session (Silent Login)
-      const { data: { session } } = await supabaseClient.auth.getSession();
-      if (session) {
-        await autoProvisionKey(session.access_token);
-      } else {
-        window.location.href = '/login.html';
-      }
-    }
-
-    async function autoProvisionKey(token) {
-      try {
-        const res = await fetch('/api/dashboard-key', {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.key) {
-            localStorage.setItem('clawsight_api_key', data.key);
-            connect(data.key);
-          }
-        } else {
-          console.error("Failed to provision key");
-        }
-      } catch (e) {
-        console.error(e);
-      }
-    }
-
-    function connect(key) {
-      activeKey = key;
-      document.getElementById('copy-btn').classList.remove('hidden');
-      
-      socket = io(window.location.origin, { auth: { token: key } });
-      const statusEl = document.getElementById('connection-status');
-      statusEl.textContent = `Connecting (${key.slice(0,12)}...)...`;
-
-      socket.on('connect', () => {
-        statusEl.textContent = 'Connected';
-        statusEl.className = 'text-xs text-emerald-400 bg-gray-900 px-2 py-1 rounded border border-emerald-900';
-      });
-
-      socket.on('connect_error', (err) => {
-        console.error("Socket Error:", err.message);
-        statusEl.textContent = 'Auth Failed';
-        statusEl.className = 'text-xs text-red-400 bg-gray-900 px-2 py-1 rounded border border-red-500';
-        // If auth fails, maybe key is revoked? Clear and reload to re-provision.
-        if (err.message.includes("Unauthorized")) {
-           localStorage.removeItem('clawsight_api_key');
-           location.reload(); 
-        }
-      });
-
-      socket.on('init', (serverAgents) => {
-        agents = {};
-        serverAgents.forEach(a => agents[a.id] = a);
-        render();
-      });
-
-      socket.on('agent-update', (agent) => {
-        agents[agent.id] = agent;
-        render();
-      });
-    }
+    socket.on('init', (list) => {
+      list.forEach(a => agents[a.id] = a);
+      render();
+    });
 
     function render() {
-      const grid = document.getElementById('agent-grid');
-      const historyGrid = document.getElementById('agent-grid-history');
-      const analyticsBar = document.getElementById('analytics-bar');
-      const emptyState = document.getElementById('empty-state');
-      
-      grid.innerHTML = '';
-      historyGrid.innerHTML = '';
-      
-      const activeAgents = Object.values(agents).filter(a => a.status !== 'killed');
-      const deadAgents = Object.values(agents).filter(a => a.status === 'killed');
-
-      if (Object.keys(agents).length > 0) {
-        analyticsBar.classList.remove('hidden');
-        emptyState.classList.add('hidden');
-      } else {
-        analyticsBar.classList.add('hidden');
-        emptyState.classList.remove('hidden');
-      }
-
-      // Update Stats
-      let totalRev = 0, totalCost = 0;
-      Object.values(agents).forEach(a => {
-        totalRev += a.metrics?.revenue || 0;
-        totalCost += a.metrics?.cost || 0;
-      });
-      document.getElementById('stat-active').textContent = activeAgents.length;
-      document.getElementById('stat-revenue').textContent = `+$${totalRev.toFixed(2)}`;
-      document.getElementById('stat-cost').textContent = `-$${totalCost.toFixed(4)}`;
-      document.getElementById('stat-profit').textContent = `$${(totalRev - totalCost).toFixed(2)}`;
-
-      // Render Cards
-      activeAgents.forEach(a => grid.appendChild(createCard(a, false)));
-      deadAgents.forEach(a => historyGrid.appendChild(createCard(a, true)));
-      
-      if(deadAgents.length > 0) document.getElementById('history-section').classList.remove('hidden');
+      grid.innerHTML = Object.values(agents).map(a => `
+        <div class="bg-gray-800 p-4 rounded border border-gray-700">
+          <div class="font-bold text-white mb-2">${a.name}</div>
+          <div class="text-xs text-gray-400 h-24 overflow-y-auto">
+            ${(a.logs || []).slice().reverse().map(l => `<div>> ${l.message}</div>`).join('')}
+          </div>
+        </div>
+      `).join('');
     }
-
-    function createCard(agent, isCompact) {
-      const div = document.createElement('div');
-      const logs = (agent.logs || []).slice().reverse().map(l => 
-        `<div class="text-xs text-gray-400 mb-1 border-l-2 border-gray-700 pl-2 truncate">${l.message}</div>`
-      ).join('');
-      
-      const statusColor = agent.status === 'working' ? 'bg-emerald-500 animate-pulse' : 'bg-gray-500';
-      
-      div.className = "bg-gray-800 border border-gray-700 rounded-lg shadow-lg overflow-hidden flex flex-col h-80";
-      div.innerHTML = `
-        <div class="p-3 border-b border-gray-700 flex justify-between items-center shrink-0">
-          <div class="font-bold text-white truncate w-32">${agent.name}</div>
-          <div class="w-2 h-2 rounded-full ${statusColor}"></div>
-        </div>
-        <div class="p-2 bg-gray-900 grid grid-cols-2 gap-2 text-center text-xs font-mono shrink-0">
-           <div class="text-emerald-400">+$${(agent.metrics?.revenue||0).toFixed(2)}</div>
-           <div class="text-red-400">-$${(agent.metrics?.cost||0).toFixed(4)}</div>
-        </div>
-        <div class="flex-1 bg-black p-3 overflow-y-auto font-mono min-h-0">
-          ${logs || '<span class="text-gray-600">No logs...</span>'}
-        </div>
-        <div class="p-2 border-t border-gray-700 shrink-0">
-           ${!isCompact ? `<button onclick="kill('${agent.id}')" class="w-full bg-red-900/50 hover:bg-red-600 text-red-200 hover:text-white text-xs py-1 rounded transition">KILL</button>` : '<div class="text-center text-xs text-red-500">TERMINATED</div>'}
-        </div>
-      `;
-      return div;
-    }
-
-    window.kill = (id) => { if(confirm('Kill agent?')) socket.emit('kill-agent', id); };
-    window.logout = async () => { 
-      await supabaseClient.auth.signOut();
-      localStorage.removeItem('clawsight_api_key'); 
-      window.location.href = '/login.html'; 
-    };
-    window.copyKey = () => {
-      navigator.clipboard.writeText(activeKey);
-      alert('Key copied to clipboard! Paste this into your agent.');
-    };
-
-    boot();
   </script>
-  <script defer src="https://counter.dev/script.js" data-id="clawsight-app" data-utcoffset="0"></script>
 </body>
 </html>
