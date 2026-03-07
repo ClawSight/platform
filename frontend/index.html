@@ -5,6 +5,7 @@
   <title>ClawSight - Mission Control</title>
   <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>👀</text></svg>">
   <style>
     ::-webkit-scrollbar { width: 8px; }
@@ -21,9 +22,11 @@
       <h1 class="text-2xl font-bold text-emerald-400 tracking-wider">CLAWSIGHT</h1>
       <span id="connection-status" class="text-xs text-gray-500 bg-gray-900 px-2 py-1 rounded border border-gray-700">Connecting...</span>
     </div>
-    <div class="flex gap-4 text-sm">
-      <button onclick="changeKey()" class="text-gray-400 hover:text-white transition-colors pb-1">API KEY</button>
+    <div class="flex gap-4 text-sm items-center">
+      <button onclick="copyKey()" id="copy-btn" class="bg-gray-700 hover:bg-gray-600 text-white px-3 py-1 rounded text-xs hidden">🔑 COPY API KEY</button>
+      <a href="/keys.html" class="text-gray-400 hover:text-white transition-colors pb-1">MANAGE KEYS</a>
       <a href="https://github.com/ClawSight/platform" target="_blank" class="text-gray-400 hover:text-emerald-400 transition-colors pb-1">DOCS</a>
+      <button onclick="logout()" class="text-red-400 hover:text-red-300 transition-colors pb-1 ml-2">LOGOUT</button>
     </div>
   </header>
 
@@ -52,8 +55,8 @@
     <!-- Empty State -->
     <div id="empty-state" class="hidden h-full flex flex-col items-center justify-center text-gray-500">
       <h3 class="text-xl font-bold mb-2">No Active Agents</h3>
-      <p class="mb-6">Waiting for agents to connect...</p>
-      <code class="bg-black p-2 rounded text-sm">npm install clawsight</code>
+      <p class="mb-6">Connect your bot using the API Key.</p>
+      <code class="bg-black p-2 rounded text-sm mb-4">npm install clawsight</code>
     </div>
 
     <!-- Agent Grid -->
@@ -66,13 +69,66 @@
   </main>
 
   <script>
-    const socketUrl = window.location.origin;
+    const SUPABASE_URL = 'https://kfibmwbwdcejrsuahbps.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_UgtXVptJpAWZMZAOgp1rGA_e2OgLuaC';
+    const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    
     let socket;
     let agents = {};
-    let apiKey = localStorage.getItem('clawsight_api_key') || 'default-key';
+    let activeKey = null;
 
-    function init() {
-      socket = io(socketUrl, { auth: { token: apiKey } });
+    async function boot() {
+      // 1. Check for Magic Link Hash
+      if (window.location.hash.includes('access_token=')) {
+        const { data, error } = await supabaseClient.auth.getSession(); // Parses hash auto
+        if (data.session) {
+           window.history.replaceState({}, document.title, window.location.pathname); // Clear hash
+           await autoProvisionKey(data.session.access_token);
+           return;
+        }
+      }
+
+      // 2. Check LocalStorage
+      const localKey = localStorage.getItem('clawsight_api_key');
+      if (localKey) {
+        connect(localKey);
+        return;
+      }
+
+      // 3. Check Session (Silent Login)
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      if (session) {
+        await autoProvisionKey(session.access_token);
+      } else {
+        window.location.href = '/login.html';
+      }
+    }
+
+    async function autoProvisionKey(token) {
+      try {
+        const res = await fetch('/api/dashboard-key', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.key) {
+            localStorage.setItem('clawsight_api_key', data.key);
+            connect(data.key);
+          }
+        } else {
+          console.error("Failed to provision key");
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    function connect(key) {
+      activeKey = key;
+      document.getElementById('copy-btn').classList.remove('hidden');
+      
+      socket = io(window.location.origin, { auth: { token: key } });
       const statusEl = document.getElementById('connection-status');
 
       socket.on('connect', () => {
@@ -80,9 +136,15 @@
         statusEl.className = 'text-xs text-emerald-400 bg-gray-900 px-2 py-1 rounded border border-emerald-900';
       });
 
-      socket.on('connect_error', () => {
+      socket.on('connect_error', (err) => {
+        console.error("Socket Error:", err.message);
         statusEl.textContent = 'Auth Failed';
         statusEl.className = 'text-xs text-red-400 bg-gray-900 px-2 py-1 rounded border border-red-500';
+        // If auth fails, maybe key is revoked? Clear and reload to re-provision.
+        if (err.message.includes("Unauthorized")) {
+           localStorage.removeItem('clawsight_api_key');
+           location.reload(); 
+        }
       });
 
       socket.on('init', (serverAgents) => {
@@ -143,20 +205,20 @@
       
       const statusColor = agent.status === 'working' ? 'bg-emerald-500 animate-pulse' : 'bg-gray-500';
       
-      div.className = "bg-gray-800 border border-gray-700 rounded-lg shadow-lg overflow-hidden flex flex-col";
+      div.className = "bg-gray-800 border border-gray-700 rounded-lg shadow-lg overflow-hidden flex flex-col h-80";
       div.innerHTML = `
-        <div class="p-3 border-b border-gray-700 flex justify-between items-center">
+        <div class="p-3 border-b border-gray-700 flex justify-between items-center shrink-0">
           <div class="font-bold text-white truncate w-32">${agent.name}</div>
           <div class="w-2 h-2 rounded-full ${statusColor}"></div>
         </div>
-        <div class="p-2 bg-gray-900 grid grid-cols-2 gap-2 text-center text-xs font-mono">
+        <div class="p-2 bg-gray-900 grid grid-cols-2 gap-2 text-center text-xs font-mono shrink-0">
            <div class="text-emerald-400">+$${(agent.metrics?.revenue||0).toFixed(2)}</div>
            <div class="text-red-400">-$${(agent.metrics?.cost||0).toFixed(4)}</div>
         </div>
-        <div class="flex-1 bg-black p-3 h-32 overflow-y-auto font-mono">
+        <div class="flex-1 bg-black p-3 overflow-y-auto font-mono min-h-0">
           ${logs || '<span class="text-gray-600">No logs...</span>'}
         </div>
-        <div class="p-2 border-t border-gray-700">
+        <div class="p-2 border-t border-gray-700 shrink-0">
            ${!isCompact ? `<button onclick="kill('${agent.id}')" class="w-full bg-red-900/50 hover:bg-red-600 text-red-200 hover:text-white text-xs py-1 rounded transition">KILL</button>` : '<div class="text-center text-xs text-red-500">TERMINATED</div>'}
         </div>
       `;
@@ -164,12 +226,18 @@
     }
 
     window.kill = (id) => { if(confirm('Kill agent?')) socket.emit('kill-agent', id); };
-    window.changeKey = () => {
-      const k = prompt('Set Master Key:', apiKey);
-      if(k) { localStorage.setItem('clawsight_api_key', k); location.reload(); }
+    window.logout = async () => { 
+      await supabaseClient.auth.signOut();
+      localStorage.removeItem('clawsight_api_key'); 
+      window.location.href = '/login.html'; 
+    };
+    window.copyKey = () => {
+      navigator.clipboard.writeText(activeKey);
+      alert('Key copied to clipboard! Paste this into your agent.');
     };
 
-    init();
+    boot();
   </script>
+  <script defer src="https://counter.dev/script.js" data-id="clawsight-app" data-utcoffset="0"></script>
 </body>
 </html>
