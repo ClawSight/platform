@@ -130,6 +130,7 @@
       
       socket = io(window.location.origin, { auth: { token: key } });
       const statusEl = document.getElementById('connection-status');
+      statusEl.textContent = `Connecting (${key.slice(0,12)}...)...`;
 
       socket.on('connect', () => {
         statusEl.textContent = 'Connected';
