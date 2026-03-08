@@ -17,8 +17,8 @@ create table if not exists api_keys (
   id uuid primary key default uuid_generate_v4(),
   tenant_id uuid not null references tenants(id) on delete cascade,
   name text not null,
-  hashed_secret text not null,
-  scopes text[] not null default array['agent:write','agent:manage']::text[],
+  key_hash text not null,
+  key_prefix text not null,
   created_at timestamptz not null default now(),
   revoked boolean not null default false,
   last_used timestamptz,
@@ -28,3 +28,8 @@ create table if not exists api_keys (
 insert into tenants (id, name)
 values ('00000000-0000-0000-0000-000000000001', 'ClawSight Demo Tenant')
 on conflict (id) do nothing;
+
+-- Migration from old schema (run if upgrading):
+-- ALTER TABLE api_keys RENAME COLUMN hashed_secret TO key_hash;
+-- ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS key_prefix text;
+-- ALTER TABLE api_keys DROP COLUMN IF EXISTS scopes;
