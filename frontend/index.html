@@ -6,156 +6,172 @@
   <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <!-- Favicon (Eyes Emoji) -->
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>👀</text></svg>">
   <style>
-    ::-webkit-scrollbar { width: 8px; }
-    ::-webkit-scrollbar-track { background: #1f2937; }
-    ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
-    ::-webkit-scrollbar-thumb:hover { background: #6b7280; }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #4b5563; }
+    @keyframes toast-in { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    @keyframes toast-out { from { transform: translateX(0); opacity: 1; } to { transform: translateX(100%); opacity: 0; } }
+    .toast-enter { animation: toast-in 0.3s ease-out forwards; }
+    .toast-exit { animation: toast-out 0.3s ease-in forwards; }
+    @keyframes fade-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+    .fade-in { animation: fade-in 0.2s ease-out; }
   </style>
 </head>
-<body class="bg-gray-900 text-white font-mono h-screen overflow-hidden flex flex-col">
+<body class="bg-gray-950 text-white font-mono h-screen overflow-hidden flex flex-col">
 
-  <!-- API KEY MODAL -->
-  <div id="key-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center px-4">
-    <div class="bg-gray-900 border border-gray-700 rounded-lg w-full max-w-lg p-8 shadow-2xl">
-      <div class="text-sm uppercase tracking-[0.3em] text-gray-500 mb-2">First Run</div>
-      <h2 class="text-2xl font-bold text-white mb-4">Enter your ClawSight API Key</h2>
-      <p class="text-gray-400 text-sm leading-relaxed mb-6">
-        1) <a href="/login.html" class="text-emerald-400 underline" target="_blank">Log in</a> with your email<br>
-        2) Open <a href="/keys.html" class="text-emerald-400 underline" target="_blank">/keys</a> and click <span class="font-semibold">Create New Key</span><br>
-        3) Paste the key below to unlock your dashboard
-      </p>
-      <label class="block text-xs uppercase tracking-widest text-gray-500 mb-2">API KEY</label>
-      <input id="api-key-input" type="text" placeholder="ck_live_..." class="w-full bg-gray-800 border border-gray-700 rounded px-4 py-3 font-mono text-sm focus:border-emerald-500 focus:outline-none text-white" />
-      <div class="flex flex-col sm:flex-row gap-3 mt-6 text-sm font-bold">
-        <button onclick="window.open('/keys.html', '_blank')" class="flex-1 border border-gray-700 text-gray-300 px-4 py-3 rounded hover:border-emerald-400 hover:text-white transition">Get an API Key</button>
-        <button type="button" onclick="saveApiKey()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-3 rounded transition">Save & Continue</button>
-      </div>
-      <p id="key-modal-error" class="text-red-400 text-xs mt-4 hidden">Enter a valid key to continue.</p>
-    </div>
-  </div>
+  <!-- Toast Container -->
+  <div id="toast-container" class="fixed top-4 right-4 z-50 flex flex-col gap-2 pointer-events-none"></div>
 
   <!-- Header -->
-  <header class="bg-gray-800 border-b border-gray-700 p-4 flex justify-between items-center shadow-md z-10">
+  <header class="bg-gray-900 border-b border-gray-800 px-6 py-3 flex justify-between items-center z-10">
     <div class="flex items-center gap-4">
-      <h1 class="text-2xl font-bold text-emerald-400 tracking-wider">CLAWSIGHT v1.0</h1>
-      <span id="connection-status" class="text-xs text-gray-500 bg-gray-900 px-2 py-1 rounded border border-gray-700">Connecting...</span>
+      <h1 class="text-xl font-bold text-emerald-400 tracking-wider">CLAWSIGHT</h1>
+      <span id="connection-status" class="text-[10px] text-gray-600 bg-gray-950 px-2 py-0.5 rounded border border-gray-800">CONNECTING</span>
     </div>
-    <div class="flex gap-4 text-sm">
-      <button onclick="showTab('dashboard')" id="tab-dashboard" class="text-emerald-400 font-bold border-b-2 border-emerald-400 pb-1">DASHBOARD</button>
-      <button onclick="showTab('setup')" id="tab-setup" class="text-gray-400 hover:text-white transition-colors pb-1">SETUP GUIDE</button>
-      <a href="/keys.html" class="text-gray-400 hover:text-emerald-400 transition-colors pb-1">API KEYS</a>
-      <button onclick="logout()" class="text-red-400 hover:text-red-300 transition-colors pb-1">LOGOUT</button>
-    </div>
+    <nav class="flex gap-1 text-xs">
+      <button onclick="showTab('dashboard')" id="tab-dashboard" class="px-3 py-1.5 rounded bg-gray-800 text-emerald-400 font-bold">DASHBOARD</button>
+      <button onclick="showTab('setup')" id="tab-setup" class="px-3 py-1.5 rounded text-gray-500 hover:text-white hover:bg-gray-800 transition">SETUP</button>
+      <button onclick="showTab('keys')" id="tab-keys" class="px-3 py-1.5 rounded text-gray-500 hover:text-white hover:bg-gray-800 transition">API KEYS</button>
+      <button onclick="logout()" class="px-3 py-1.5 rounded text-gray-600 hover:text-red-400 hover:bg-gray-800 transition ml-2">LOGOUT</button>
+    </nav>
   </header>
 
-  <!-- Global Analytics Bar -->
-  <div id="analytics-bar" class="bg-gray-800 border-b border-gray-700 p-4 grid grid-cols-4 gap-4 text-center shadow-sm z-10 hidden">
+  <!-- Analytics Bar -->
+  <div id="analytics-bar" class="bg-gray-900/50 border-b border-gray-800 px-6 py-3 grid grid-cols-4 gap-4 text-center hidden">
     <div>
-      <div class="text-xs text-gray-500 uppercase font-bold">Total Active</div>
-      <div class="text-xl font-bold text-white" id="stat-active">0</div>
+      <div class="text-[10px] text-gray-600 uppercase font-bold tracking-wider">Active</div>
+      <div class="text-lg font-bold text-white" id="stat-active">0</div>
     </div>
-    <div class="border-l border-gray-700">
-      <div class="text-xs text-gray-500 uppercase font-bold">Total Revenue</div>
-      <div class="text-xl font-bold text-emerald-400" id="stat-revenue">$0.00</div>
+    <div class="border-l border-gray-800">
+      <div class="text-[10px] text-gray-600 uppercase font-bold tracking-wider">Revenue</div>
+      <div class="text-lg font-bold text-emerald-400" id="stat-revenue">$0.00</div>
     </div>
-    <div class="border-l border-gray-700">
-      <div class="text-xs text-gray-500 uppercase font-bold">Total Cost</div>
-      <div class="text-xl font-bold text-red-400" id="stat-cost">-$0.00</div>
+    <div class="border-l border-gray-800">
+      <div class="text-[10px] text-gray-600 uppercase font-bold tracking-wider">Cost</div>
+      <div class="text-lg font-bold text-red-400" id="stat-cost">$0.00</div>
     </div>
-    <div class="border-l border-gray-700">
-      <div class="text-xs text-gray-500 uppercase font-bold">Net Profit</div>
-      <div class="text-xl font-bold text-gray-400" id="stat-profit">$0.00</div>
+    <div class="border-l border-gray-800">
+      <div class="text-[10px] text-gray-600 uppercase font-bold tracking-wider">Profit</div>
+      <div class="text-lg font-bold text-gray-400" id="stat-profit">$0.00</div>
     </div>
   </div>
 
-  <!-- Main Content Area -->
-  <main class="flex-1 overflow-y-auto p-6 relative pb-20">
+  <!-- Main Content -->
+  <main class="flex-1 overflow-y-auto p-6 pb-16">
 
     <!-- DASHBOARD TAB -->
     <div id="view-dashboard" class="block h-full">
-      <!-- Empty State -->
-      <div id="empty-state" class="hidden h-full flex flex-col items-center justify-center text-gray-500">
-        <svg class="w-16 h-16 mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path></svg>
-        <h3 class="text-xl font-bold mb-2">No Active Agents</h3>
-        <p class="mb-6">Your fleet is offline. Start an agent to see data.</p>
-        <button onclick="showTab('setup')" class="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-2 rounded font-bold transition-colors">Install ClawSight SDK</button>
-      </div>
-
-      <!-- Active Agents -->
-      <h3 id="label-active" class="text-sm font-bold text-gray-500 uppercase tracking-widest mb-4 hidden">Active Fleet</h3>
-      <div id="agent-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-8">
-        <!-- Active cards -->
-      </div>
-
-      <!-- Terminated Agents -->
-      <div id="history-section" class="hidden">
-        <h3 class="text-sm font-bold text-gray-500 uppercase tracking-widest mb-4 border-t border-gray-700 pt-8">History / Terminated</h3>
-        <div id="agent-grid-history" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          <!-- Compact cards -->
+      <div id="empty-state" class="hidden h-full flex flex-col items-center justify-center text-gray-600">
+        <div class="w-12 h-12 rounded-full border-2 border-gray-800 flex items-center justify-center mb-4">
+          <svg class="w-6 h-6 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
         </div>
+        <h3 class="text-sm font-bold mb-1 text-gray-500">No agents online</h3>
+        <p class="text-xs text-gray-700 mb-4">Connect your first agent to see it here.</p>
+        <button onclick="showTab('setup')" class="text-xs bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded font-bold transition">Get Started</button>
+      </div>
+
+      <h3 id="label-active" class="text-[10px] font-bold text-gray-600 uppercase tracking-[0.2em] mb-3 hidden">Active Fleet</h3>
+      <div id="agent-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-6"></div>
+
+      <div id="history-section" class="hidden">
+        <h3 class="text-[10px] font-bold text-gray-700 uppercase tracking-[0.2em] mb-3 border-t border-gray-800 pt-6">Terminated</h3>
+        <div id="agent-grid-history" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3"></div>
       </div>
     </div>
 
     <!-- SETUP TAB -->
-    <div id="view-setup" class="hidden max-w-4xl mx-auto">
-      <div class="bg-gray-800 border border-gray-700 rounded-lg p-8 shadow-xl">
-        <h2 class="text-3xl font-bold text-white mb-6">Quick Start Guide</h2>
-        <div class="mb-8">
-          <h3 class="text-lg font-bold text-emerald-400 mb-2">1. Install the SDK</h3>
-          <p class="text-gray-400 mb-3">Run this in your agent's project folder:</p>
-          <div class="bg-black p-4 rounded border border-gray-700 font-mono text-sm relative group">
+    <div id="view-setup" class="hidden max-w-3xl mx-auto">
+      <div class="bg-gray-900 border border-gray-800 rounded-lg p-8">
+        <h2 class="text-xl font-bold text-white mb-6">Quick Start</h2>
+
+        <div class="mb-6">
+          <div class="text-[10px] text-emerald-400 uppercase tracking-wider font-bold mb-2">1. Install</div>
+          <div class="bg-gray-950 p-3 rounded border border-gray-800 font-mono text-sm flex justify-between items-center group">
             <code class="text-green-400">npm install clawsight</code>
-            <button onclick="copyToClipboard('npm install clawsight')" class="absolute right-4 top-4 text-gray-500 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity">Copy</button>
+            <button onclick="copyText('npm install clawsight')" class="text-gray-600 hover:text-white text-xs opacity-0 group-hover:opacity-100 transition">copy</button>
           </div>
         </div>
-        <div class="mb-8">
-          <h3 class="text-lg font-bold text-emerald-400 mb-2">2. Add to Your Agent</h3>
-          <p class="text-gray-400 mb-3">Copy this code into your agent's main file:</p>
-          <div class="bg-black p-4 rounded border border-gray-700 font-mono text-sm relative group overflow-x-auto">
-<pre><code class="text-blue-300">const</code> <code class="text-yellow-300">monitor</code> = <code class="text-green-300">require</code>(<code class="text-orange-300">'clawsight'</code>);
-<code class="text-blue-300">const</code> <code class="text-yellow-300">watcher</code> = <code class="text-yellow-300">monitor</code>({
-  <code class="text-purple-300">server</code>: <code class="text-orange-300">'https://app.clawsight.org'</code>,
-  <code class="text-purple-300">token</code>: <code class="text-orange-300">'YOUR_API_KEY_HERE'</code>
+
+        <div class="mb-6">
+          <div class="text-[10px] text-emerald-400 uppercase tracking-wider font-bold mb-2">2. Add to your agent</div>
+          <div class="bg-gray-950 p-3 rounded border border-gray-800 font-mono text-sm relative group overflow-x-auto">
+<pre class="text-gray-300"><span class="text-blue-400">const</span> monitor = <span class="text-green-400">require</span>(<span class="text-amber-400">'clawsight'</span>);
+<span class="text-blue-400">const</span> watcher = monitor({
+  <span class="text-purple-400">server</span>: <span class="text-amber-400">'https://app.clawsight.org'</span>,
+  <span class="text-purple-400">token</span>:  <span class="text-amber-400">'YOUR_API_KEY'</span>
 });
 
-<code class="text-gray-500">// Register Agent</code>
-<code class="text-yellow-300">watcher</code>.<code class="text-yellow-300">init</code>({
-  <code class="text-purple-300">id</code>: <code class="text-orange-300">'my-agent-01'</code>,
-  <code class="text-purple-300">name</code>: <code class="text-orange-300">'Production Bot'</code>
-});
-
-<code class="text-gray-500">// Send Logs & Metrics</code>
-<code class="text-yellow-300">watcher</code>.<code class="text-yellow-300">log</code>(<code class="text-orange-300">'Task started...'</code>, <code class="text-orange-300">'working'</code>);
-<code class="text-yellow-300">watcher</code>.<code class="text-yellow-300">metric</code>(<code class="text-orange-300">'cost'</code>, 0.05);</code></pre>
-            <button onclick="copyCodeBlock()" class="absolute right-4 top-4 text-gray-500 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity">Copy</button>
+watcher.<span class="text-yellow-300">init</span>({ <span class="text-purple-400">id</span>: <span class="text-amber-400">'agent-01'</span>, <span class="text-purple-400">name</span>: <span class="text-amber-400">'My Bot'</span> });
+watcher.<span class="text-yellow-300">log</span>(<span class="text-amber-400">'Hello World'</span>, <span class="text-amber-400">'working'</span>);
+watcher.<span class="text-yellow-300">metric</span>(<span class="text-amber-400">'cost'</span>, <span class="text-cyan-400">0.05</span>);</pre>
+            <button onclick="copyCodeBlock()" class="absolute right-3 top-3 text-gray-600 hover:text-white text-xs opacity-0 group-hover:opacity-100 transition">copy</button>
           </div>
         </div>
-        <div class="mb-8">
-          <h3 class="text-lg font-bold text-emerald-400 mb-2">3. Your API Key</h3>
-          <p class="text-gray-400 mb-3">Use this key to authenticate your agents:</p>
-          <div class="bg-black p-4 rounded border border-gray-700 font-mono text-sm break-all">
-            <span id="display-api-key" class="text-yellow-400">Not set (Check Settings)</span>
-          </div>
+
+        <div>
+          <div class="text-[10px] text-emerald-400 uppercase tracking-wider font-bold mb-2">3. Your API key</div>
+          <div class="bg-gray-950 p-3 rounded border border-gray-800 font-mono text-sm text-yellow-400 break-all" id="display-api-key">Loading...</div>
         </div>
       </div>
     </div>
+
+    <!-- API KEYS TAB (inline, no separate page) -->
+    <div id="view-keys" class="hidden max-w-3xl mx-auto">
+      <div class="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
+        <div class="p-6 border-b border-gray-800 flex justify-between items-center">
+          <h2 class="text-xl font-bold text-white">API Keys</h2>
+          <button onclick="createKey()" id="create-key-btn" class="text-xs bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded font-bold transition">Create New Key</button>
+        </div>
+
+        <!-- Inline new key display (replaces modal) -->
+        <div id="new-key-banner" class="hidden bg-emerald-950 border-b border-emerald-900 p-4 fade-in">
+          <div class="flex justify-between items-start gap-4">
+            <div class="flex-1 min-w-0">
+              <div class="text-[10px] text-emerald-400 uppercase tracking-wider font-bold mb-1">New key created — copy it now</div>
+              <div class="bg-gray-950 p-3 rounded border border-gray-800 font-mono text-sm text-emerald-400 break-all select-all" id="new-key-value">...</div>
+              <div class="text-[10px] text-gray-600 mt-1">This key won't be shown again.</div>
+            </div>
+            <button onclick="dismissNewKey()" class="text-gray-500 hover:text-white text-xs mt-1 shrink-0">dismiss</button>
+          </div>
+        </div>
+
+        <!-- Inline key name input (replaces prompt()) -->
+        <div id="key-name-form" class="hidden border-b border-gray-800 p-4 bg-gray-950 fade-in">
+          <div class="flex gap-3 items-center">
+            <input id="key-name-input" type="text" placeholder="Key name (e.g. Twitter Bot)" class="flex-1 bg-gray-900 border border-gray-800 rounded px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none text-white" />
+            <button onclick="submitNewKey()" class="text-xs bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded font-bold transition">Create</button>
+            <button onclick="cancelNewKey()" class="text-xs text-gray-500 hover:text-white px-3 py-2 transition">Cancel</button>
+          </div>
+        </div>
+
+        <table class="w-full text-left">
+          <thead class="bg-gray-950 text-gray-600 text-[10px] uppercase tracking-wider">
+            <tr>
+              <th class="px-6 py-3 font-bold">Name</th>
+              <th class="px-6 py-3 font-bold">Prefix</th>
+              <th class="px-6 py-3 font-bold">Created</th>
+              <th class="px-6 py-3 font-bold text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="keys-list" class="text-gray-400 text-sm"></tbody>
+        </table>
+
+        <div id="keys-empty" class="hidden p-8 text-center text-gray-700 text-sm">No API keys yet. Create one to connect agents.</div>
+      </div>
+    </div>
+
   </main>
 
-  <!-- FOOTER -->
-  <footer class="bg-gray-900 border-t border-gray-800 p-4 text-center text-xs text-gray-600 fixed bottom-0 w-full z-10">
-    <div class="flex justify-center gap-6 mb-2">
-      <a href="https://github.com/ClawSight/platform#readme" target="_blank" class="hover:text-emerald-400 transition-colors">Documentation</a>
-      <a href="https://github.com/ClawSight/platform" target="_blank" class="hover:text-emerald-400 transition-colors">GitHub</a>
-      <span class="text-gray-700">|</span>
-      <span class="flex items-center gap-2">
-        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-        System Online
-      </span>
-    </div>
-    <p>&copy; 2026 ClawSight. Built for OpenClaw.</p>
+  <!-- Footer -->
+  <footer class="bg-gray-950 border-t border-gray-800 px-6 py-2 text-center text-[10px] text-gray-700 fixed bottom-0 w-full z-10">
+    <a href="https://github.com/ClawSight/platform" target="_blank" class="hover:text-emerald-400 transition">GitHub</a>
+    <span class="mx-2">·</span>
+    <a href="https://github.com/ClawSight/platform#readme" target="_blank" class="hover:text-emerald-400 transition">Docs</a>
+    <span class="mx-2">·</span>
+    <span>&copy; 2026 ClawSight</span>
   </footer>
 
   <script>
@@ -165,59 +181,53 @@
       const SUPABASE_KEY = 'sb_publishable_UgtXVptJpAWZMZAOgp1rGA_e2OgLuaC';
       const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-      // --- APP STATE ---
+      // --- STATE ---
       let socket;
       let agents = {};
       let apiKey = localStorage.getItem('clawsight_api_key');
-      let isNewUser = false;
+      let sessionToken = null; // Supabase access token for API calls
 
-      // --- DOM REFS ---
-      const modalEl = document.getElementById('key-modal');
-      const keyInput = document.getElementById('api-key-input');
-      const errorEl = document.getElementById('key-modal-error');
-
-      // --- BOOT SEQUENCE ---
+      // --- BOOT ---
       boot();
 
       async function boot() {
         const statusEl = document.getElementById('connection-status');
 
-        // 0. Handle magic link redirect (access_token in hash)
+        // Handle magic link redirect
         if (window.location.hash.includes('access_token=')) {
-          statusEl.textContent = 'Completing login...';
+          statusEl.textContent = 'LOGGING IN';
           const params = new URLSearchParams(window.location.hash.substring(1));
           const access_token = params.get('access_token');
           const refresh_token = params.get('refresh_token');
           if (access_token && refresh_token) {
             await supabaseClient.auth.setSession({ access_token, refresh_token });
-            // Clear the hash and force fresh boot with the new session
             window.history.replaceState({}, document.title, window.location.pathname);
             apiKey = null;
             localStorage.removeItem('clawsight_api_key');
-            // Fall through to session check below to auto-provision
           }
         }
 
-        // 1. If we have a cached API key, try connecting immediately
+        // Try cached key first
         if (apiKey) {
           initSocket();
+          loadSession();
           return;
         }
 
-        // 2. No API key — check if user has a Supabase session
-        statusEl.textContent = 'Checking session...';
-        statusEl.className = 'text-xs text-yellow-400 bg-gray-900 px-2 py-1 rounded border border-yellow-600';
+        // Check session
+        statusEl.textContent = 'CHECKING SESSION';
+        statusEl.className = 'text-[10px] text-yellow-500 bg-gray-950 px-2 py-0.5 rounded border border-yellow-900';
 
         const { data: { session } } = await supabaseClient.auth.getSession();
-
         if (!session) {
-          // No session, no key — redirect to login
           window.location.href = '/login.html';
           return;
         }
 
-        // 3. Session exists but no API key — auto-provision one
-        statusEl.textContent = 'Provisioning session key...';
+        sessionToken = session.access_token;
+
+        // Auto-provision key silently
+        statusEl.textContent = 'PROVISIONING';
         try {
           const res = await fetch('/api/dashboard-key', {
             method: 'POST',
@@ -231,334 +241,475 @@
             }
           }
         } catch (e) {
-          console.error('Failed to provision dashboard key:', e);
+          console.error('Key provisioning failed:', e);
         }
 
         if (!apiKey) {
-          // Provisioning failed — show manual key entry
-          openKeyModal();
-          return;
+          // Fall back to JWT
+          apiKey = session.access_token;
         }
 
-        // 4. Check if new or returning user to pick default view
+        // Check if new user -> show setup tab
         try {
           const statusRes = await fetch('/api/user/status', {
             headers: { Authorization: `Bearer ${session.access_token}` }
           });
           if (statusRes.ok) {
             const userStatus = await statusRes.json();
-            isNewUser = userStatus.isNew || !userStatus.hasKeys;
+            if (userStatus.isNew || !userStatus.hasKeys) {
+              showTab('setup');
+            }
           }
-        } catch (e) {
-          // Non-critical, default to dashboard view
-        }
+        } catch (e) { /* non-critical */ }
 
         initSocket();
+      }
 
-        // New users see the setup guide first
-        if (isNewUser) {
-          showTab('setup');
+      async function loadSession() {
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        if (session) sessionToken = session.access_token;
+      }
+
+      // --- SOCKET ---
+      function initSocket() {
+        if (!apiKey) return;
+        socket = io(window.location.origin, {
+          auth: { token: apiKey },
+          reconnection: true,
+          reconnectionAttempts: Infinity,
+          reconnectionDelay: 1000,
+          reconnectionDelayMax: 10000
+        });
+
+        const statusEl = document.getElementById('connection-status');
+        let reprovisionAttempted = false;
+
+        socket.on('connect', () => {
+          statusEl.textContent = 'CONNECTED';
+          statusEl.className = 'text-[10px] text-emerald-400 bg-gray-950 px-2 py-0.5 rounded border border-emerald-900';
+          reprovisionAttempted = false;
+        });
+
+        socket.on('disconnect', () => {
+          statusEl.textContent = 'RECONNECTING';
+          statusEl.className = 'text-[10px] text-yellow-500 bg-gray-950 px-2 py-0.5 rounded border border-yellow-900';
+        });
+
+        socket.on('connect_error', async () => {
+          if (reprovisionAttempted) return;
+          reprovisionAttempted = true;
+
+          statusEl.textContent = 'REFRESHING';
+          statusEl.className = 'text-[10px] text-yellow-500 bg-gray-950 px-2 py-0.5 rounded border border-yellow-900';
+          socket.disconnect();
+
+          const { data: { session } } = await supabaseClient.auth.getSession();
+          if (session) {
+            try {
+              const res = await fetch('/api/dashboard-key', {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${session.access_token}` }
+              });
+              if (res.ok) {
+                const data = await res.json();
+                if (data.key) {
+                  apiKey = data.key;
+                  localStorage.setItem('clawsight_api_key', apiKey);
+                  initSocket();
+                  return;
+                }
+              }
+            } catch (e) {
+              console.error('Re-provision failed:', e);
+            }
+          }
+
+          localStorage.removeItem('clawsight_api_key');
+          window.location.href = '/login.html';
+        });
+
+        socket.on('agent-update', (agent) => {
+          agents[agent.id] = agent;
+          updateOrMoveCard(agent);
+          updateGlobalStats();
+        });
+
+        socket.on('init', (data) => {
+          agents = {};
+          (Array.isArray(data) ? data : Object.values(data)).forEach(a => { agents[a.id] = a; });
+          renderAllAgents();
+        });
+      }
+
+      // --- TOAST NOTIFICATIONS ---
+      window.toast = (message, type = 'info') => {
+        const container = document.getElementById('toast-container');
+        const colors = {
+          success: 'border-emerald-800 bg-gray-900 text-emerald-400',
+          error: 'border-red-800 bg-gray-900 text-red-400',
+          info: 'border-gray-700 bg-gray-900 text-gray-300'
+        };
+        const el = document.createElement('div');
+        el.className = `pointer-events-auto px-4 py-2 rounded border text-xs font-mono toast-enter ${colors[type] || colors.info}`;
+        el.textContent = message;
+        container.appendChild(el);
+        setTimeout(() => {
+          el.classList.remove('toast-enter');
+          el.classList.add('toast-exit');
+          setTimeout(() => el.remove(), 300);
+        }, 3000);
+      };
+
+      // --- RENDER ---
+      function updateOrMoveCard(agent) {
+        const isDead = ['killed', 'error', 'offline'].includes(agent.status);
+        const targetGridId = isDead ? 'agent-grid-history' : 'agent-grid';
+        const currentCard = document.getElementById(`agent-${agent.id}`);
+
+        if (currentCard && currentCard.parentElement.id !== targetGridId) {
+          currentCard.remove();
+          renderCard(agent, document.getElementById(targetGridId), isDead);
+        } else if (currentCard) {
+          updateCardContent(currentCard, agent, isDead);
+        } else {
+          renderCard(agent, document.getElementById(targetGridId), isDead);
         }
       }
 
-      keyInput?.addEventListener('keydown', (evt) => {
-        if (evt.key === 'Enter') saveApiKey();
-      });
-
-      function openKeyModal() {
-        modalEl.classList.remove('hidden');
-        setTimeout(() => keyInput?.focus(), 100);
+      function renderCard(agent, grid, isCompact) {
+        const card = document.createElement('div');
+        card.id = `agent-${agent.id}`;
+        card.className = isCompact
+          ? "bg-gray-900/50 border border-gray-800/50 rounded flex justify-between items-center p-3 opacity-50 hover:opacity-80 transition-all"
+          : "bg-gray-900 border border-gray-800 rounded-lg overflow-hidden flex flex-col h-80 transition-all hover:border-gray-700 fade-in";
+        grid.appendChild(card);
+        updateCardContent(card, agent, isCompact);
       }
 
-      function closeKeyModal() {
-        modalEl.classList.add('hidden');
-        errorEl.classList.add('hidden');
+      function updateCardContent(card, agent, isCompact) {
+        const cost = agent.metrics?.cost || 0;
+        const revenue = agent.metrics?.revenue || 0;
+        const profit = revenue - cost;
+        const tokens = agent.metrics?.tokens?.toLocaleString() || '0';
+
+        const profitColor = profit >= 0 ? 'text-emerald-400' : 'text-red-400';
+        const profitSign = profit >= 0 ? '+' : '';
+
+        let statusColor = 'bg-gray-600';
+        let statusLabel = agent.status;
+        if (agent.status === 'working') { statusColor = 'bg-emerald-500 animate-pulse'; }
+        if (agent.status === 'error') { statusColor = 'bg-yellow-500'; }
+        if (agent.status === 'killed') { statusColor = 'bg-red-600'; }
+        if (agent.status === 'offline') { statusColor = 'bg-gray-700'; }
+
+        if (isCompact) {
+          card.innerHTML = `
+            <div class="flex items-center gap-3">
+              <div class="w-1.5 h-1.5 rounded-full ${statusColor}"></div>
+              <div>
+                <div class="font-bold text-gray-500 text-xs">${agent.name}</div>
+                <div class="text-[9px] text-gray-700 font-mono">${agent.id}</div>
+              </div>
+            </div>
+            <div class="text-right text-[10px] font-mono text-gray-600">
+              <div class="${profitColor}">${profitSign}$${profit.toFixed(2)}</div>
+              <div>${tokens} tok</div>
+            </div>`;
+        } else {
+          const logsHtml = agent.logs.slice(-20).reverse().map(l =>
+            `<div class="text-[11px] text-gray-400 font-mono border-l border-gray-800 pl-2 py-0.5">
+               <span class="text-gray-600">${new Date(l.timestamp).toLocaleTimeString()}</span> ${l.message}
+             </div>`
+          ).join('');
+
+          // Check if this agent is in kill-confirm mode
+          const killConfirmId = card.dataset.killConfirm;
+          const isConfirming = killConfirmId === agent.id;
+
+          let actionBar;
+          if (agent.status === 'killed') {
+            actionBar = `<span class="text-red-500/60 text-[10px] font-bold text-center w-full block">TERMINATED</span>`;
+          } else if (isConfirming) {
+            actionBar = `
+              <span class="text-[10px] text-red-400 mr-auto">Kill this agent?</span>
+              <button onclick="confirmKill(this, '${agent.id}')" class="bg-red-600 hover:bg-red-500 text-white text-[10px] px-3 py-1 rounded font-bold transition">Yes, kill</button>
+              <button onclick="cancelKill(this)" class="text-gray-500 hover:text-white text-[10px] px-2 py-1 transition">No</button>`;
+          } else {
+            actionBar = `
+              <button onclick="shareAgent('${agent.id}')" class="text-gray-600 hover:text-white text-[10px] px-2 py-1 rounded transition flex items-center gap-1">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path></svg>
+                share
+              </button>
+              <button onclick="startKill(this, '${agent.id}')" class="text-gray-600 hover:text-red-400 text-[10px] px-2 py-1 rounded transition">kill</button>`;
+          }
+
+          card.innerHTML = `
+            <div class="p-3 flex justify-between items-center border-b border-gray-800">
+              <div class="min-w-0">
+                <h3 class="font-bold text-white text-sm truncate" title="${agent.name}">${agent.name}</h3>
+                <div class="text-[9px] text-gray-600 font-mono truncate">${agent.id}</div>
+              </div>
+              <div class="flex items-center gap-2 shrink-0">
+                <span class="text-[9px] text-gray-600 uppercase">${statusLabel}</span>
+                <div class="w-2 h-2 rounded-full ${statusColor}"></div>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-3 bg-gray-950 border-b border-gray-800 p-2 text-center">
+              <div><div class="text-[9px] text-gray-600 uppercase">Cost</div><div class="text-xs font-mono text-red-400">$${cost.toFixed(4)}</div></div>
+              <div class="border-l border-gray-900"><div class="text-[9px] text-gray-600 uppercase">Revenue</div><div class="text-xs font-mono text-emerald-400">$${revenue.toFixed(2)}</div></div>
+              <div class="border-l border-gray-900"><div class="text-[9px] text-gray-600 uppercase">Profit</div><div class="text-xs font-bold font-mono ${profitColor}">${profitSign}$${profit.toFixed(2)}</div></div>
+            </div>
+
+            <div class="flex-1 bg-gray-950 p-3 overflow-y-auto">
+              ${logsHtml || '<div class="text-gray-700 text-[11px] italic">Waiting for logs...</div>'}
+            </div>
+
+            <div class="p-2 border-t border-gray-800 flex justify-between items-center">
+              ${actionBar}
+            </div>`;
+
+          // Preserve kill-confirm state after re-render
+          if (isConfirming) card.dataset.killConfirm = agent.id;
+        }
       }
 
-      function saveApiKey() {
-        const value = keyInput.value.trim();
-        if (!value || value.length < 12) {
-          errorEl.classList.remove('hidden');
+      function updateGlobalStats() {
+        let totalCost = 0, totalRevenue = 0, activeCount = 0, deadCount = 0;
+
+        Object.values(agents).forEach(agent => {
+          totalCost += agent.metrics?.cost || 0;
+          totalRevenue += agent.metrics?.revenue || 0;
+          if (!['killed', 'error', 'offline'].includes(agent.status)) activeCount++;
+          else deadCount++;
+        });
+
+        const totalProfit = totalRevenue - totalCost;
+
+        document.getElementById('stat-active').textContent = activeCount;
+        document.getElementById('stat-revenue').textContent = '$' + totalRevenue.toFixed(2);
+        document.getElementById('stat-cost').textContent = '$' + totalCost.toFixed(4);
+
+        const profitEl = document.getElementById('stat-profit');
+        profitEl.textContent = (totalProfit >= 0 ? '+' : '') + '$' + totalProfit.toFixed(2);
+        profitEl.className = totalProfit >= 0 ? 'text-lg font-bold text-emerald-400' : 'text-lg font-bold text-red-500';
+
+        const hasAgents = Object.keys(agents).length > 0;
+        document.getElementById('empty-state').classList.toggle('hidden', hasAgents);
+        document.getElementById('analytics-bar').classList.toggle('hidden', !hasAgents);
+        document.getElementById('label-active').classList.toggle('hidden', !hasAgents);
+        document.getElementById('history-section').classList.toggle('hidden', deadCount === 0);
+      }
+
+      function renderAllAgents() {
+        document.getElementById('agent-grid').innerHTML = '';
+        document.getElementById('agent-grid-history').innerHTML = '';
+        Object.values(agents).forEach(updateOrMoveCard);
+        updateGlobalStats();
+        setApiKeyDisplay();
+      }
+
+      // --- TABS ---
+      window.showTab = (tabName) => {
+        ['dashboard', 'setup', 'keys'].forEach(t => {
+          document.getElementById(`view-${t}`).classList.add('hidden');
+          const btn = document.getElementById(`tab-${t}`);
+          btn.className = 'px-3 py-1.5 rounded text-gray-500 hover:text-white hover:bg-gray-800 transition';
+        });
+        document.getElementById(`view-${tabName}`).classList.remove('hidden');
+        const activeBtn = document.getElementById(`tab-${tabName}`);
+        activeBtn.className = 'px-3 py-1.5 rounded bg-gray-800 text-emerald-400 font-bold';
+
+        if (tabName === 'keys') loadKeys();
+        if (tabName === 'setup') setApiKeyDisplay();
+      };
+
+      // --- API KEYS TAB ---
+      async function getToken() {
+        if (sessionToken) return sessionToken;
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        if (!session) { window.location.href = '/login.html'; return null; }
+        sessionToken = session.access_token;
+        return sessionToken;
+      }
+
+      async function loadKeys() {
+        const token = await getToken();
+        if (!token) return;
+
+        const res = await fetch('/api/keys', { headers: { Authorization: `Bearer ${token}` } });
+        const keys = await res.json();
+
+        const list = document.getElementById('keys-list');
+        const empty = document.getElementById('keys-empty');
+
+        if (!keys.length) {
+          list.innerHTML = '';
+          empty.classList.remove('hidden');
           return;
         }
-        apiKey = value;
-        localStorage.setItem('clawsight_api_key', apiKey);
-        setApiKeyDisplay();
-        closeKeyModal();
-        initSocket();
+
+        empty.classList.add('hidden');
+        list.innerHTML = keys.map(k => `
+          <tr class="border-t border-gray-800">
+            <td class="px-6 py-3">${k.name || 'Agent Key'}</td>
+            <td class="px-6 py-3 font-mono text-gray-600 text-xs">${k.key_prefix}...</td>
+            <td class="px-6 py-3 text-xs text-gray-600">${new Date(k.created_at).toLocaleDateString()}</td>
+            <td class="px-6 py-3 text-right">
+              <button onclick="revokeKey('${k.id}', this)" class="text-gray-600 hover:text-red-400 text-xs transition">revoke</button>
+            </td>
+          </tr>
+        `).join('');
       }
 
-    function setApiKeyDisplay() {
-      const el = document.getElementById('display-api-key');
-      if (!el) return;
-      el.textContent = apiKey || 'Key Missing';
-    }
+      window.createKey = () => {
+        document.getElementById('key-name-form').classList.remove('hidden');
+        document.getElementById('new-key-banner').classList.add('hidden');
+        document.getElementById('create-key-btn').classList.add('hidden');
+        setTimeout(() => document.getElementById('key-name-input').focus(), 50);
+      };
 
-    function initSocket() {
-      if (!apiKey) return;
-      const serverUrl = window.location.origin;
-      socket = io(serverUrl, {
-        auth: { token: apiKey },
-        reconnection: true,
-        reconnectionAttempts: Infinity,
-        reconnectionDelay: 1000,
-        reconnectionDelayMax: 10000
-      });
-      const statusEl = document.getElementById('connection-status');
-      let reprovisionAttempted = false;
+      window.cancelNewKey = () => {
+        document.getElementById('key-name-form').classList.add('hidden');
+        document.getElementById('create-key-btn').classList.remove('hidden');
+      };
 
-      socket.on('connect', () => {
-        statusEl.textContent = 'Connected';
-        statusEl.className = 'text-xs text-emerald-400 bg-gray-900 px-2 py-1 rounded border border-emerald-900';
-        reprovisionAttempted = false;
-      });
+      window.submitNewKey = async () => {
+        const name = document.getElementById('key-name-input').value.trim();
+        if (!name) { document.getElementById('key-name-input').focus(); return; }
 
-      socket.on('disconnect', () => {
-        statusEl.textContent = 'Reconnecting...';
-        statusEl.className = 'text-xs text-yellow-400 bg-gray-900 px-2 py-1 rounded border border-yellow-600';
-      });
+        const token = await getToken();
+        if (!token) return;
 
-      socket.on('connect_error', async (err) => {
-        // Guard: only try re-provisioning once per connection cycle
-        if (reprovisionAttempted) return;
-        reprovisionAttempted = true;
+        const res = await fetch('/api/keys', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name })
+        });
 
-        statusEl.textContent = 'Key expired — refreshing...';
-        statusEl.className = 'text-xs text-yellow-400 bg-gray-900 px-2 py-1 rounded border border-yellow-600';
-        socket.disconnect();
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          toast('Failed to create key: ' + (err.error || res.statusText), 'error');
+          return;
+        }
 
-        // Try to re-provision a fresh dashboard key from the Supabase session
-        const { data: { session } } = await supabaseClient.auth.getSession();
-        if (session) {
-          try {
-            const res = await fetch('/api/dashboard-key', {
-              method: 'POST',
-              headers: { Authorization: `Bearer ${session.access_token}` }
-            });
-            if (res.ok) {
-              const data = await res.json();
-              if (data.key) {
-                apiKey = data.key;
-                localStorage.setItem('clawsight_api_key', apiKey);
-                initSocket();
-                return;
-              }
-            }
-          } catch (e) {
-            console.error('Failed to re-provision key:', e);
+        const data = await res.json();
+        if (!data.key) {
+          toast('Failed to create key', 'error');
+          return;
+        }
+
+        // Show key inline
+        document.getElementById('key-name-form').classList.add('hidden');
+        document.getElementById('create-key-btn').classList.remove('hidden');
+        document.getElementById('new-key-value').textContent = data.key;
+        document.getElementById('new-key-banner').classList.remove('hidden');
+        document.getElementById('key-name-input').value = '';
+
+        // Copy to clipboard automatically
+        navigator.clipboard.writeText(data.key).then(() => {
+          toast('Key copied to clipboard', 'success');
+        });
+
+        loadKeys();
+      };
+
+      window.dismissNewKey = () => {
+        document.getElementById('new-key-banner').classList.add('hidden');
+      };
+
+      window.revokeKey = async (id, btn) => {
+        // Inline confirmation: change button to confirm
+        const row = btn.closest('tr');
+        const cell = btn.closest('td');
+        const original = cell.innerHTML;
+
+        cell.innerHTML = `
+          <span class="text-[10px] text-red-400 mr-2">Revoke?</span>
+          <button onclick="doRevoke('${id}', this)" class="text-red-400 hover:text-red-300 text-xs font-bold mr-1">Yes</button>
+          <button onclick="cancelRevoke(this, '${id}')" class="text-gray-500 hover:text-white text-xs">No</button>`;
+
+        cell.dataset.original = original;
+      };
+
+      window.doRevoke = async (id, btn) => {
+        const token = await getToken();
+        if (!token) return;
+        await fetch(`/api/keys/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+        toast('Key revoked', 'info');
+        loadKeys();
+      };
+
+      window.cancelRevoke = (btn, id) => {
+        const cell = btn.closest('td');
+        cell.innerHTML = `<button onclick="revokeKey('${id}', this)" class="text-gray-600 hover:text-red-400 text-xs transition">revoke</button>`;
+      };
+
+      // --- AGENT ACTIONS ---
+      window.startKill = (btn, agentId) => {
+        const card = btn.closest('[id^="agent-"]');
+        card.dataset.killConfirm = agentId;
+        const agent = agents[agentId];
+        if (agent) updateCardContent(card, agent, false);
+      };
+
+      window.cancelKill = (btn) => {
+        const card = btn.closest('[id^="agent-"]');
+        delete card.dataset.killConfirm;
+        const agentId = card.id.replace('agent-', '');
+        const agent = agents[agentId];
+        if (agent) updateCardContent(card, agent, false);
+      };
+
+      window.confirmKill = (btn, agentId) => {
+        const card = btn.closest('[id^="agent-"]');
+        delete card.dataset.killConfirm;
+        socket.emit('kill-agent', agentId);
+        toast('Kill signal sent', 'info');
+      };
+
+      window.shareAgent = (id) => {
+        fetch('/api/share', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ agentId: id })
+        })
+        .then(res => res.json())
+        .then(data => {
+          if (data.url) {
+            navigator.clipboard.writeText(data.url);
+            toast('Share link copied to clipboard', 'success');
+          } else {
+            toast('Failed to generate share link', 'error');
           }
-        }
+        })
+        .catch(() => toast('Failed to generate share link', 'error'));
+      };
 
-        // Session is also gone — redirect to login
-        statusEl.textContent = 'Session expired';
-        statusEl.className = 'text-xs text-red-400 bg-gray-900 px-2 py-1 rounded border border-red-500';
+      // --- HELPERS ---
+      function setApiKeyDisplay() {
+        const el = document.getElementById('display-api-key');
+        if (!el) return;
+        el.textContent = apiKey || 'Not available';
+      }
+
+      window.copyText = (text) => {
+        navigator.clipboard.writeText(text);
+        toast('Copied', 'success');
+      };
+
+      window.copyCodeBlock = () => {
+        const code = `const monitor = require('clawsight');\nconst watcher = monitor({\n  server: '${window.location.origin}',\n  token: '${apiKey}'\n});\nwatcher.init({ id: 'agent-01', name: 'My Bot' });\nwatcher.log('Hello World', 'working');`;
+        navigator.clipboard.writeText(code);
+        toast('Code copied', 'success');
+      };
+
+      window.logout = async () => {
         localStorage.removeItem('clawsight_api_key');
+        await supabaseClient.auth.signOut();
         window.location.href = '/login.html';
-      });
-
-      socket.on('agent-update', (agent) => {
-        agents[agent.id] = agent;
-        updateOrMoveCard(agent);
-        updateGlobalStats();
-      });
-
-      socket.on('init', (data) => {
-        agents = {};
-        (Array.isArray(data) ? data : Object.values(data)).forEach(a => { agents[a.id] = a; });
-        renderAllAgents();
-      });
-    }
-
-    // --- RENDER LOGIC ---
-
-    function updateOrMoveCard(agent) {
-      const isDead = (agent.status === 'killed' || agent.status === 'error' || agent.status === 'offline');
-      const targetGridId = isDead ? 'agent-grid-history' : 'agent-grid';
-      const currentCard = document.getElementById(`agent-${agent.id}`);
-
-      if (currentCard && currentCard.parentElement.id !== targetGridId) {
-        currentCard.remove();
-        renderCard(agent, document.getElementById(targetGridId), isDead);
-      } else if (currentCard) {
-        updateCardContent(currentCard, agent, isDead);
-      } else {
-        renderCard(agent, document.getElementById(targetGridId), isDead);
-      }
-    }
-
-    function renderCard(agent, grid, isCompact) {
-      const card = document.createElement('div');
-      card.id = `agent-${agent.id}`;
-      if (isCompact) {
-        card.className = "bg-gray-800/50 border border-gray-700/50 rounded flex justify-between items-center p-4 grayscale hover:grayscale-0 transition-all";
-      } else {
-        card.className = "bg-gray-800 border border-gray-700 rounded-lg shadow-lg overflow-hidden flex flex-col h-96 transition-all hover:border-emerald-500/50";
-      }
-      grid.appendChild(card);
-      updateCardContent(card, agent, isCompact);
-    }
-
-    function updateCardContent(card, agent, isCompact) {
-      const cost = agent.metrics?.cost || 0;
-      const revenue = agent.metrics?.revenue || 0;
-      const profit = revenue - cost;
-      const tokens = agent.metrics?.tokens?.toLocaleString() || '0';
-
-      const costDisplay = cost.toFixed(4);
-      const revenueDisplay = revenue.toFixed(2);
-      const profitDisplay = profit.toFixed(2);
-      const profitColor = profit >= 0 ? 'text-emerald-400' : 'text-red-400';
-      const profitSign = profit >= 0 ? '+' : '';
-
-      let statusColor = 'bg-gray-500';
-      if (agent.status === 'working') statusColor = 'bg-emerald-500 animate-pulse';
-      if (agent.status === 'error') statusColor = 'bg-yellow-500 animate-bounce';
-      if (agent.status === 'killed') statusColor = 'bg-red-600';
-      if (agent.status === 'offline') statusColor = 'bg-gray-600';
-
-      if (isCompact) {
-        card.innerHTML = `
-          <div class="flex items-center gap-3">
-             <div class="w-2 h-2 rounded-full ${statusColor}"></div>
-             <div>
-               <div class="font-bold text-gray-400 text-sm">${agent.name}</div>
-               <div class="text-[10px] text-gray-600 font-mono">${agent.id}</div>
-             </div>
-          </div>
-          <div class="text-right text-xs font-mono text-gray-500">
-             <div class="${profitColor}">${profitSign}$${profitDisplay}</div>
-             <div>${tokens} toks</div>
-          </div>
-        `;
-      } else {
-        const logsHtml = agent.logs.slice().reverse().map(l =>
-          `<div class="mb-1 text-xs text-gray-300 font-mono border-l-2 border-gray-700 pl-2">
-             <span class="text-gray-500">[${new Date(l.timestamp).toLocaleTimeString()}]</span> ${l.message}
-           </div>`
-        ).join('');
-
-        card.innerHTML = `
-          <div class="p-4 bg-gray-800 border-b border-gray-700 flex justify-between items-center">
-            <div>
-              <h3 class="font-bold text-white truncate w-40" title="${agent.name}">${agent.name}</h3>
-              <div class="text-xs text-gray-500 font-mono truncate w-40">${agent.id}</div>
-            </div>
-            <div class="w-3 h-3 rounded-full ${statusColor} status-dot"></div>
-          </div>
-
-          <div class="grid grid-cols-3 gap-1 bg-gray-900 border-b border-gray-700 p-2 text-center">
-            <div><div class="text-[10px] text-gray-500 uppercase font-bold">COST</div><div class="text-sm font-mono text-red-400">-$${costDisplay}</div></div>
-            <div class="border-l border-gray-800"><div class="text-[10px] text-gray-500 uppercase font-bold">REVENUE</div><div class="text-sm font-mono text-emerald-400">+$${revenueDisplay}</div></div>
-            <div class="border-l border-gray-800"><div class="text-[10px] text-gray-500 uppercase font-bold">PROFIT</div><div class="text-sm font-bold font-mono ${profitColor}">${profitSign}$${profitDisplay}</div></div>
-          </div>
-
-          <div class="flex-1 bg-black p-4 overflow-y-auto scrollbar-thin h-48">
-            ${logsHtml || '<div class="text-gray-600 text-sm italic">Waiting for logs...</div>'}
-          </div>
-          <div class="p-3 bg-gray-800 border-t border-gray-700 flex justify-between items-center gap-2">
-            <button onclick="shareAgent('${agent.id}')" class="bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs px-3 py-1 rounded font-bold transition-colors flex-1 flex items-center justify-center gap-1 group">
-              <span>SHARE</span>
-              <svg class="w-3 h-3 group-hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path></svg>
-            </button>
-            ${agent.status !== 'killed' ?
-            `<button onclick="killAgent('${agent.id}')" class="bg-red-900/80 hover:bg-red-600 text-white text-xs px-3 py-1 rounded font-bold transition-colors flex-1">KILL</button>` :
-            `<span class="text-red-500 text-xs font-bold flex-1 text-center">TERMINATED</span>`
-            }
-          </div>
-        `;
-      }
-    }
-
-    function updateGlobalStats() {
-      let totalCost = 0;
-      let totalRevenue = 0;
-      let activeCount = 0;
-      let deadCount = 0;
-
-      Object.values(agents).forEach(agent => {
-        totalCost += agent.metrics?.cost || 0;
-        totalRevenue += agent.metrics?.revenue || 0;
-        if (agent.status !== 'killed' && agent.status !== 'error' && agent.status !== 'offline') activeCount++;
-        else deadCount++;
-      });
-
-      const totalProfit = totalRevenue - totalCost;
-
-      document.getElementById('stat-active').textContent = activeCount;
-      document.getElementById('stat-revenue').textContent = '+$' + totalRevenue.toFixed(2);
-      document.getElementById('stat-cost').textContent = '-$' + totalCost.toFixed(4);
-
-      const profitEl = document.getElementById('stat-profit');
-      profitEl.textContent = (totalProfit >= 0 ? '+' : '') + '$' + totalProfit.toFixed(2);
-      profitEl.className = totalProfit >= 0 ? "text-xl font-bold text-emerald-400" : "text-xl font-bold text-red-500";
-
-      const hasAgents = Object.keys(agents).length > 0;
-      const historySection = document.getElementById('history-section');
-
-      if (hasAgents) {
-        document.getElementById('empty-state').classList.add('hidden');
-        document.getElementById('analytics-bar').classList.remove('hidden');
-        document.getElementById('label-active').classList.remove('hidden');
-      }
-
-      if (deadCount > 0) historySection.classList.remove('hidden');
-      else historySection.classList.add('hidden');
-    }
-
-    function renderAllAgents() {
-      document.getElementById('agent-grid').innerHTML = '';
-      document.getElementById('agent-grid-history').innerHTML = '';
-      Object.values(agents).forEach(updateOrMoveCard);
-      updateGlobalStats();
-    }
-
-    // Helper functions
-    window.showTab = (tabName) => {
-      ['dashboard', 'setup'].forEach(t => {
-        document.getElementById(`view-${t}`).classList.add('hidden');
-        document.getElementById(`tab-${t}`).classList.remove('text-emerald-400', 'border-b-2', 'border-emerald-400');
-        document.getElementById(`tab-${t}`).classList.add('text-gray-400');
-      });
-      document.getElementById(`view-${tabName}`).classList.remove('hidden');
-      document.getElementById(`tab-${tabName}`).classList.add('text-emerald-400', 'border-b-2', 'border-emerald-400');
-      document.getElementById(`tab-${tabName}`).classList.remove('text-gray-400');
-    };
-    window.logout = async () => {
-      localStorage.removeItem('clawsight_api_key');
-      await supabaseClient.auth.signOut();
-      window.location.href = '/login.html';
-    };
-    window.killAgent = (id) => { if (confirm(`Terminate agent ${id}?`)) socket.emit('kill-agent', id); };
-    window.shareAgent = (id) => {
-      fetch('/api/share', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ agentId: id })
-      })
-      .then(res => res.json())
-      .then(data => {
-        if (data.url) {
-          navigator.clipboard.writeText(data.url);
-          alert('Shareable link copied to clipboard!');
-        } else {
-          alert('Failed to generate share link.');
-        }
-      });
-    };
-    window.copyToClipboard = (text) => { navigator.clipboard.writeText(text); alert("Copied!"); };
-    window.copyCodeBlock = () => {
-      const code = `const monitor = require('clawsight');
-const watcher = monitor({
-  server: 'https://app.clawsight.org',
-  token: '${apiKey}'
-});
-watcher.init({ id: 'agent-01', name: 'My Bot' });
-watcher.log('Hello World', 'working');`;
-      navigator.clipboard.writeText(code);
-      alert("Code copied!");
-    };
+      };
     })();
   </script>
-  <script defer src="https://counter.dev/script.js" data-id="clawsight-app" data-utcoffset="0"></script>
 </body>
 </html>
