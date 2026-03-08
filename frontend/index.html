@@ -235,9 +235,10 @@
         }
 
         if (!apiKey) {
-          // Provisioning failed — show manual key entry
-          openKeyModal();
-          return;
+          // Provisioning failed — fall back to JWT for socket auth
+          console.warn('Dashboard key provisioning failed, using JWT for socket auth');
+          apiKey = session.access_token;
+          // Don't persist JWT to localStorage (it expires)
         }
 
         // 4. Check if new or returning user to pick default view

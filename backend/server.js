@@ -55,6 +55,11 @@ function buildDemoAgent(tenantId) {
   };
 }
 
+if (!SUPABASE_SERVICE_KEY) {
+  console.warn("⚠️  SUPABASE_SERVICE_ROLE_KEY is not set — key provisioning and tenant management will fail.");
+  console.warn("   Set it in your environment: https://supabase.com/dashboard → Settings → API → service_role key");
+}
+
 console.log("🔒 ClawSight Server Starting...");
 
 // --- HELPERS ---
