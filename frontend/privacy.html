@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Privacy Policy - ClawSight</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>👀</text></svg>">
+</head>
+<body class="bg-gray-950 text-gray-300 font-mono min-h-screen">
+  <header class="bg-gray-900 border-b border-gray-800 px-6 py-4 flex justify-between items-center">
+    <a href="/" class="text-xl font-bold text-emerald-400 tracking-wider hover:opacity-80 transition">CLAWSIGHT</a>
+    <a href="/" class="text-xs text-gray-500 hover:text-white transition">&larr; Back to Dashboard</a>
+  </header>
+
+  <main class="max-w-3xl mx-auto px-6 py-12">
+    <h1 class="text-2xl font-bold text-white mb-2">Privacy Policy</h1>
+    <p class="text-xs text-gray-600 mb-8">Last updated: March 8, 2026</p>
+
+    <div class="space-y-8 text-sm leading-relaxed">
+
+      <section>
+        <h2 class="text-base font-bold text-white mb-2">1. Overview</h2>
+        <p>ClawSight ("we", "us", "the Service") is an open-source, real-time monitoring platform for autonomous AI agents. This Privacy Policy explains what data we collect, how we use it, and your rights regarding that data. We are committed to collecting only what is necessary to operate the Service.</p>
+      </section>
+
+      <section>
+        <h2 class="text-base font-bold text-white mb-2">2. Data We Collect</h2>
+
+        <h3 class="text-sm font-bold text-gray-400 mt-4 mb-1">Account Data</h3>
+        <ul class="list-disc list-inside space-y-1 text-gray-400">
+          <li><strong class="text-gray-300">Email address</strong> &mdash; collected during magic link authentication via Supabase. Used solely for login and account identification.</li>
+          <li><strong class="text-gray-300">User ID</strong> &mdash; a unique identifier assigned by Supabase. Used to associate you with your tenant and API keys.</li>
+        </ul>
+
+        <h3 class="text-sm font-bold text-gray-400 mt-4 mb-1">API Keys</h3>
+        <ul class="list-disc list-inside space-y-1 text-gray-400">
+          <li><strong class="text-gray-300">Key hash</strong> &mdash; an Argon2 hash of your API key. The raw key is shown once at creation and never stored.</li>
+          <li><strong class="text-gray-300">Key prefix</strong> &mdash; the first 12 characters of your key, stored for identification purposes.</li>
+          <li><strong class="text-gray-300">Key name</strong> &mdash; a label you assign when creating a key.</li>
+        </ul>
+
+        <h3 class="text-sm font-bold text-gray-400 mt-4 mb-1">Agent Data</h3>
+        <ul class="list-disc list-inside space-y-1 text-gray-400">
+          <li><strong class="text-gray-300">Agent ID and name</strong> &mdash; identifiers you assign to your agents via the SDK.</li>
+          <li><strong class="text-gray-300">Logs</strong> &mdash; text messages sent by your agents. Stored in server memory only (up to 50 per agent). Not persisted to a database.</li>
+          <li><strong class="text-gray-300">Metrics</strong> &mdash; cost, revenue, and token counts reported by your agents. Stored in server memory only.</li>
+          <li><strong class="text-gray-300">Status</strong> &mdash; the operational state of your agents (working, idle, error, killed, offline).</li>
+        </ul>
+
+        <h3 class="text-sm font-bold text-gray-400 mt-4 mb-1">Connection Data</h3>
+        <ul class="list-disc list-inside space-y-1 text-gray-400">
+          <li><strong class="text-gray-300">Socket connection metadata</strong> &mdash; socket IDs, connection timestamps, and tenant room assignments. Used for real-time communication routing.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2 class="text-base font-bold text-white mb-2">3. Data We Do Not Collect</h2>
+        <ul class="list-disc list-inside space-y-1 text-gray-400">
+          <li>We do not use cookies for tracking or advertising</li>
+          <li>We do not collect IP addresses for analytics</li>
+          <li>We do not use third-party analytics or tracking scripts</li>
+          <li>We do not sell, rent, or share your data with third parties</li>
+          <li>We do not store raw API keys after initial creation</li>
+          <li>We do not access the content or behavior of your AI agents beyond what they report via the SDK</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2 class="text-base font-bold text-white mb-2">4. How We Use Your Data</h2>
+        <ul class="list-disc list-inside space-y-1 text-gray-400">
+          <li><strong class="text-gray-300">Authentication</strong> &mdash; your email is used to send magic link login emails via Supabase</li>
+          <li><strong class="text-gray-300">Tenant isolation</strong> &mdash; your user ID is linked to a tenant to ensure you only see your own agents and keys</li>
+          <li><strong class="text-gray-300">Real-time monitoring</strong> &mdash; agent data is routed to your dashboard via WebSocket rooms scoped to your tenant</li>
+          <li><strong class="text-gray-300">Shared reports</strong> &mdash; when you generate a share link, a point-in-time snapshot of agent data is served at a public URL</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2 class="text-base font-bold text-white mb-2">5. Data Storage and Retention</h2>
+
+        <div class="bg-gray-900 border border-gray-800 rounded p-4 mt-2">
+          <table class="w-full text-xs">
+            <thead class="text-gray-500 uppercase">
+              <tr>
+                <th class="text-left pb-2">Data Type</th>
+                <th class="text-left pb-2">Storage</th>
+                <th class="text-left pb-2">Retention</th>
+              </tr>
+            </thead>
+            <tbody class="text-gray-400">
+              <tr class="border-t border-gray-800">
+                <td class="py-2">Email, User ID</td>
+                <td class="py-2">Supabase (PostgreSQL)</td>
+                <td class="py-2">Until account deletion</td>
+              </tr>
+              <tr class="border-t border-gray-800">
+                <td class="py-2">API key hashes</td>
+                <td class="py-2">Supabase (PostgreSQL)</td>
+                <td class="py-2">Until key revocation</td>
+              </tr>
+              <tr class="border-t border-gray-800">
+                <td class="py-2">Agent logs &amp; metrics</td>
+                <td class="py-2">Server memory only</td>
+                <td class="py-2">Until server restart</td>
+              </tr>
+              <tr class="border-t border-gray-800">
+                <td class="py-2">Shared report snapshots</td>
+                <td class="py-2">Server memory only</td>
+                <td class="py-2">Until server restart</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p class="mt-3 text-gray-500 text-xs">Agent data is ephemeral. It exists only in server memory during your session and is lost when the server restarts or redeploys. We do not maintain long-term logs of your agent activity.</p>
+      </section>
+
+      <section>
+        <h2 class="text-base font-bold text-white mb-2">6. Third-Party Services</h2>
+        <p>We use the following third-party services:</p>
+        <ul class="list-disc list-inside space-y-1 text-gray-400 mt-2">
+          <li><strong class="text-gray-300">Supabase</strong> &mdash; authentication and database. Subject to <a href="https://supabase.com/privacy" class="text-emerald-400 hover:underline">Supabase's Privacy Policy</a>.</li>
+          <li><strong class="text-gray-300">Render</strong> &mdash; hosting and deployment. Subject to <a href="https://render.com/privacy" class="text-emerald-400 hover:underline">Render's Privacy Policy</a>.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2 class="text-base font-bold text-white mb-2">7. Your Rights</h2>
+        <p>You have the right to:</p>
+        <ul class="list-disc list-inside space-y-1 text-gray-400 mt-2">
+          <li><strong class="text-gray-300">Access</strong> &mdash; view all API keys and agent data associated with your account via the dashboard</li>
+          <li><strong class="text-gray-300">Delete</strong> &mdash; revoke API keys at any time through the dashboard. Agent data is automatically purged on disconnect or server restart</li>
+          <li><strong class="text-gray-300">Portability</strong> &mdash; the SDK sends data in standard JSON format; you control what your agents report</li>
+          <li><strong class="text-gray-300">Withdraw consent</strong> &mdash; stop using the Service at any time by revoking your keys and signing out</li>
+        </ul>
+        <p class="mt-2">To request full account deletion, open an issue on our <a href="https://github.com/ClawSight/platform" class="text-emerald-400 hover:underline">GitHub repository</a> or contact the maintainers.</p>
+      </section>
+
+      <section>
+        <h2 class="text-base font-bold text-white mb-2">8. Security</h2>
+        <p>We take reasonable measures to protect your data:</p>
+        <ul class="list-disc list-inside space-y-1 text-gray-400 mt-2">
+          <li>API keys are hashed with Argon2 before storage</li>
+          <li>Authentication uses Supabase's secure magic link flow</li>
+          <li>WebSocket connections are authenticated and scoped to tenant rooms</li>
+          <li>Agent data is isolated per tenant; cross-tenant access is not possible</li>
+        </ul>
+        <p class="mt-2">No system is 100% secure. If you discover a vulnerability, please report it via our GitHub repository.</p>
+      </section>
+
+      <section>
+        <h2 class="text-base font-bold text-white mb-2">9. Children's Privacy</h2>
+        <p>ClawSight is not intended for use by individuals under the age of 13. We do not knowingly collect personal information from children.</p>
+      </section>
+
+      <section>
+        <h2 class="text-base font-bold text-white mb-2">10. Changes to This Policy</h2>
+        <p>We may update this Privacy Policy from time to time. Changes will be reflected in the "Last updated" date at the top of this page. Continued use of the Service after changes constitutes acceptance.</p>
+      </section>
+
+      <section>
+        <h2 class="text-base font-bold text-white mb-2">11. Contact</h2>
+        <p>For privacy-related questions or requests, open an issue on our <a href="https://github.com/ClawSight/platform" class="text-emerald-400 hover:underline">GitHub repository</a> or reach out to the maintainers.</p>
+      </section>
+
+    </div>
+  </main>
+
+  <footer class="border-t border-gray-800 px-6 py-4 text-center text-[10px] text-gray-700 mt-12">
+    <a href="/terms.html" class="hover:text-emerald-400 transition">Terms</a>
+    <span class="mx-2">&middot;</span>
+    <a href="/privacy.html" class="text-emerald-400">Privacy</a>
+    <span class="mx-2">&middot;</span>
+    <span>&copy; 2026 ClawSight</span>
+  </footer>
+</body>
+</html>

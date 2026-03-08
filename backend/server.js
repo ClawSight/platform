@@ -121,8 +121,7 @@ app.post('/api/keys', async (req, res) => {
     tenant_id: tenantId,
     key_hash: keyHash,
     key_prefix: keyPrefix,
-    name: req.body.name || 'Agent Key',
-    created_by: user.id
+    name: req.body.name || 'Agent Key'
   });
 
   if (dbError) return res.status(500).json({ error: dbError.message });
@@ -190,8 +189,7 @@ app.post('/api/dashboard-key', async (req, res) => {
     tenant_id: tenantId,
     key_hash: keyHash,
     key_prefix: keyPrefix,
-    name: 'Dashboard Session Key',
-    created_by: user.id
+    name: 'Dashboard Session Key'
   });
 
   if (insertError) return res.status(500).json({ error: insertError.message });
