@@ -2,10 +2,6 @@
 
 **Open-source dashboard for real-time agent observability.** See every thought, token, and dollar your bots burn — kill loops instantly, share read-only sessions, and keep multiple tenants safe.
 
-<p align="center">
-  <img src="docs/screenshot-dashboard.png" alt="ClawSight dashboard" width="800"/>
-</p>
-
 ---
 
 ## Why ClawSight?
