@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ClawSight - Mission Control</title>
   <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
@@ -26,41 +27,41 @@
   <div id="toast-container" class="fixed top-4 right-4 z-50 flex flex-col gap-2 pointer-events-none"></div>
 
   <!-- Header -->
-  <header class="bg-gray-900 border-b border-gray-800 px-6 py-3 flex justify-between items-center z-10">
-    <div class="flex items-center gap-4">
-      <h1 class="text-xl font-bold text-emerald-400 tracking-wider">CLAWSIGHT</h1>
+  <header class="bg-gray-900 border-b border-gray-800 px-3 sm:px-6 py-2 sm:py-3 flex flex-col sm:flex-row justify-between items-center z-10 gap-2">
+    <div class="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-start">
+      <h1 class="text-lg sm:text-xl font-bold text-emerald-400 tracking-wider">CLAWSIGHT</h1>
       <span id="connection-status" class="text-[10px] text-gray-600 bg-gray-950 px-2 py-0.5 rounded border border-gray-800">CONNECTING</span>
     </div>
-    <nav class="flex gap-1 text-xs">
-      <button onclick="showTab('dashboard')" id="tab-dashboard" class="px-3 py-1.5 rounded bg-gray-800 text-emerald-400 font-bold">DASHBOARD</button>
-      <button onclick="showTab('setup')" id="tab-setup" class="px-3 py-1.5 rounded text-gray-500 hover:text-white hover:bg-gray-800 transition">SETUP</button>
-      <button onclick="showTab('keys')" id="tab-keys" class="px-3 py-1.5 rounded text-gray-500 hover:text-white hover:bg-gray-800 transition">API KEYS</button>
-      <button onclick="logout()" class="px-3 py-1.5 rounded text-gray-600 hover:text-red-400 hover:bg-gray-800 transition ml-2">LOGOUT</button>
+    <nav class="flex gap-1 text-xs w-full sm:w-auto justify-between sm:justify-end">
+      <button onclick="showTab('dashboard')" id="tab-dashboard" class="px-2 sm:px-3 py-1.5 rounded bg-gray-800 text-emerald-400 font-bold">DASHBOARD</button>
+      <button onclick="showTab('setup')" id="tab-setup" class="px-2 sm:px-3 py-1.5 rounded text-gray-500 hover:text-white hover:bg-gray-800 transition">SETUP</button>
+      <button onclick="showTab('keys')" id="tab-keys" class="px-2 sm:px-3 py-1.5 rounded text-gray-500 hover:text-white hover:bg-gray-800 transition">API KEYS</button>
+      <button onclick="logout()" class="px-2 sm:px-3 py-1.5 rounded text-gray-600 hover:text-red-400 hover:bg-gray-800 transition sm:ml-2">LOGOUT</button>
     </nav>
   </header>
 
   <!-- Analytics Bar -->
-  <div id="analytics-bar" class="bg-gray-900/50 border-b border-gray-800 px-6 py-3 grid grid-cols-4 gap-4 text-center hidden">
+  <div id="analytics-bar" class="bg-gray-900/50 border-b border-gray-800 px-3 sm:px-6 py-2 sm:py-3 grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4 text-center hidden">
     <div>
       <div class="text-[10px] text-gray-600 uppercase font-bold tracking-wider">Active</div>
       <div class="text-lg font-bold text-white" id="stat-active">0</div>
     </div>
-    <div class="border-l border-gray-800">
+    <div class="sm:border-l border-gray-800">
       <div class="text-[10px] text-gray-600 uppercase font-bold tracking-wider">Revenue</div>
       <div class="text-lg font-bold text-emerald-400" id="stat-revenue">$0.00</div>
     </div>
-    <div class="border-l border-gray-800">
+    <div class="sm:border-l border-gray-800">
       <div class="text-[10px] text-gray-600 uppercase font-bold tracking-wider">Cost</div>
       <div class="text-lg font-bold text-red-400" id="stat-cost">$0.00</div>
     </div>
-    <div class="border-l border-gray-800">
+    <div class="sm:border-l border-gray-800">
       <div class="text-[10px] text-gray-600 uppercase font-bold tracking-wider">Profit</div>
       <div class="text-lg font-bold text-gray-400" id="stat-profit">$0.00</div>
     </div>
   </div>
 
   <!-- Main Content -->
-  <main class="flex-1 overflow-y-auto p-6 pb-16">
+  <main class="flex-1 overflow-y-auto p-3 sm:p-6 pb-16">
 
     <!-- DASHBOARD TAB -->
     <div id="view-dashboard" class="block h-full">
@@ -84,7 +85,7 @@
 
     <!-- SETUP TAB -->
     <div id="view-setup" class="hidden max-w-3xl mx-auto">
-      <div class="bg-gray-900 border border-gray-800 rounded-lg p-8">
+      <div class="bg-gray-900 border border-gray-800 rounded-lg p-4 sm:p-8">
         <h2 class="text-xl font-bold text-white mb-6">Quick Start</h2>
 
         <div class="mb-6">
@@ -121,8 +122,8 @@ watcher.<span class="text-yellow-300">metric</span>(<span class="text-amber-400"
     <!-- API KEYS TAB (inline, no separate page) -->
     <div id="view-keys" class="hidden max-w-3xl mx-auto">
       <div class="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
-        <div class="p-6 border-b border-gray-800 flex justify-between items-center">
-          <h2 class="text-xl font-bold text-white">API Keys</h2>
+        <div class="p-4 sm:p-6 border-b border-gray-800 flex justify-between items-center gap-3">
+          <h2 class="text-lg sm:text-xl font-bold text-white">API Keys</h2>
           <button onclick="createKey()" id="create-key-btn" class="text-xs bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded font-bold transition">Create New Key</button>
         </div>
 
@@ -147,17 +148,19 @@ watcher.<span class="text-yellow-300">metric</span>(<span class="text-amber-400"
           </div>
         </div>
 
-        <table class="w-full text-left">
-          <thead class="bg-gray-950 text-gray-600 text-[10px] uppercase tracking-wider">
-            <tr>
-              <th class="px-6 py-3 font-bold">Name</th>
-              <th class="px-6 py-3 font-bold">Prefix</th>
-              <th class="px-6 py-3 font-bold">Created</th>
-              <th class="px-6 py-3 font-bold text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody id="keys-list" class="text-gray-400 text-sm"></tbody>
-        </table>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left min-w-[480px]">
+            <thead class="bg-gray-950 text-gray-600 text-[10px] uppercase tracking-wider">
+              <tr>
+                <th class="px-3 sm:px-6 py-3 font-bold">Name</th>
+                <th class="px-3 sm:px-6 py-3 font-bold">Prefix</th>
+                <th class="px-3 sm:px-6 py-3 font-bold">Created</th>
+                <th class="px-3 sm:px-6 py-3 font-bold text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="keys-list" class="text-gray-400 text-sm"></tbody>
+          </table>
+        </div>
 
         <div id="keys-empty" class="hidden p-8 text-center text-gray-700 text-sm">No API keys yet. Create one to connect agents.</div>
       </div>
@@ -166,7 +169,7 @@ watcher.<span class="text-yellow-300">metric</span>(<span class="text-amber-400"
   </main>
 
   <!-- Footer -->
-  <footer class="bg-gray-950 border-t border-gray-800 px-6 py-2 text-center text-[10px] text-gray-700 fixed bottom-0 w-full z-10">
+  <footer class="bg-gray-950 border-t border-gray-800 px-3 sm:px-6 py-2 text-center text-[10px] text-gray-700 fixed bottom-0 w-full z-10">
     <a href="https://github.com/ClawSight/platform" target="_blank" class="hover:text-emerald-400 transition">GitHub</a>
     <span class="mx-2">&middot;</span>
     <a href="https://github.com/ClawSight/platform#readme" target="_blank" class="hover:text-emerald-400 transition">Docs</a>
@@ -565,10 +568,10 @@ watcher.<span class="text-yellow-300">metric</span>(<span class="text-amber-400"
         empty.classList.add('hidden');
         list.innerHTML = keys.map(k => `
           <tr class="border-t border-gray-800">
-            <td class="px-6 py-3">${esc(k.name || 'Agent Key')}</td>
-            <td class="px-6 py-3 font-mono text-gray-600 text-xs">${esc(k.key_prefix)}...</td>
-            <td class="px-6 py-3 text-xs text-gray-600">${new Date(k.created_at).toLocaleDateString()}</td>
-            <td class="px-6 py-3 text-right">
+            <td class="px-3 sm:px-6 py-3">${esc(k.name || 'Agent Key')}</td>
+            <td class="px-3 sm:px-6 py-3 font-mono text-gray-600 text-xs">${esc(k.key_prefix)}...</td>
+            <td class="px-3 sm:px-6 py-3 text-xs text-gray-600">${new Date(k.created_at).toLocaleDateString()}</td>
+            <td class="px-3 sm:px-6 py-3 text-right">
               <button onclick="revokeKey('${k.id}', this)" class="text-gray-600 hover:text-red-400 text-xs transition">revoke</button>
             </td>
           </tr>
