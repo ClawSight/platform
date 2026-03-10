@@ -365,6 +365,12 @@ watcher.<span class="text-yellow-300">metric</span>(<span class="text-amber-400"
       };
 
       // --- RENDER ---
+      function esc(str) {
+        const d = document.createElement('div');
+        d.textContent = str;
+        return d.innerHTML;
+      }
+
       function updateOrMoveCard(agent) {
         const isDead = ['killed', 'error', 'offline'].includes(agent.status);
         const targetGridId = isDead ? 'agent-grid-history' : 'agent-grid';
@@ -406,13 +412,16 @@ watcher.<span class="text-yellow-300">metric</span>(<span class="text-amber-400"
         if (agent.status === 'killed') { statusColor = 'bg-red-600'; }
         if (agent.status === 'offline') { statusColor = 'bg-gray-700'; }
 
+        const safeName = esc(agent.name);
+        const safeId = esc(agent.id);
+
         if (isCompact) {
           card.innerHTML = `
             <div class="flex items-center gap-3">
               <div class="w-1.5 h-1.5 rounded-full ${statusColor}"></div>
               <div>
-                <div class="font-bold text-gray-500 text-xs">${agent.name}</div>
-                <div class="text-[9px] text-gray-700 font-mono">${agent.id}</div>
+                <div class="font-bold text-gray-500 text-xs">${safeName}</div>
+                <div class="text-[9px] text-gray-700 font-mono">${safeId}</div>
               </div>
             </div>
             <div class="text-right text-[10px] font-mono text-gray-600">
@@ -422,7 +431,7 @@ watcher.<span class="text-yellow-300">metric</span>(<span class="text-amber-400"
         } else {
           const logsHtml = agent.logs.slice(-20).reverse().map(l =>
             `<div class="text-[11px] text-gray-400 font-mono border-l border-gray-800 pl-2 py-0.5">
-               <span class="text-gray-600">${new Date(l.timestamp).toLocaleTimeString()}</span> ${l.message}
+               <span class="text-gray-600">${new Date(l.timestamp).toLocaleTimeString()}</span> ${esc(l.message)}
              </div>`
           ).join('');
 
@@ -436,22 +445,22 @@ watcher.<span class="text-yellow-300">metric</span>(<span class="text-amber-400"
           } else if (isConfirming) {
             actionBar = `
               <span class="text-[10px] text-red-400 mr-auto">Kill this agent?</span>
-              <button onclick="confirmKill(this, '${agent.id}')" class="bg-red-600 hover:bg-red-500 text-white text-[10px] px-3 py-1 rounded font-bold transition">Yes, kill</button>
+              <button onclick="confirmKill(this, '${safeId}')" class="bg-red-600 hover:bg-red-500 text-white text-[10px] px-3 py-1 rounded font-bold transition">Yes, kill</button>
               <button onclick="cancelKill(this)" class="text-gray-500 hover:text-white text-[10px] px-2 py-1 transition">No</button>`;
           } else {
             actionBar = `
-              <button onclick="shareAgent('${agent.id}')" class="text-gray-600 hover:text-white text-[10px] px-2 py-1 rounded transition flex items-center gap-1">
+              <button onclick="shareAgent('${safeId}')" class="text-gray-600 hover:text-white text-[10px] px-2 py-1 rounded transition flex items-center gap-1">
                 <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path></svg>
                 share
               </button>
-              <button onclick="startKill(this, '${agent.id}')" class="text-gray-600 hover:text-red-400 text-[10px] px-2 py-1 rounded transition">kill</button>`;
+              <button onclick="startKill(this, '${safeId}')" class="text-gray-600 hover:text-red-400 text-[10px] px-2 py-1 rounded transition">kill</button>`;
           }
 
           card.innerHTML = `
             <div class="p-3 flex justify-between items-center border-b border-gray-800">
               <div class="min-w-0">
-                <h3 class="font-bold text-white text-sm truncate" title="${agent.name}">${agent.name}</h3>
-                <div class="text-[9px] text-gray-600 font-mono truncate">${agent.id}</div>
+                <h3 class="font-bold text-white text-sm truncate" title="${safeName}">${safeName}</h3>
+                <div class="text-[9px] text-gray-600 font-mono truncate">${safeId}</div>
               </div>
               <div class="flex items-center gap-2 shrink-0">
                 <span class="text-[9px] text-gray-600 uppercase">${statusLabel}</span>
@@ -556,8 +565,8 @@ watcher.<span class="text-yellow-300">metric</span>(<span class="text-amber-400"
         empty.classList.add('hidden');
         list.innerHTML = keys.map(k => `
           <tr class="border-t border-gray-800">
-            <td class="px-6 py-3">${k.name || 'Agent Key'}</td>
-            <td class="px-6 py-3 font-mono text-gray-600 text-xs">${k.key_prefix}...</td>
+            <td class="px-6 py-3">${esc(k.name || 'Agent Key')}</td>
+            <td class="px-6 py-3 font-mono text-gray-600 text-xs">${esc(k.key_prefix)}...</td>
             <td class="px-6 py-3 text-xs text-gray-600">${new Date(k.created_at).toLocaleDateString()}</td>
             <td class="px-6 py-3 text-right">
               <button onclick="revokeKey('${k.id}', this)" class="text-gray-600 hover:text-red-400 text-xs transition">revoke</button>

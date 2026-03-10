@@ -15,13 +15,17 @@ app.use(express.static(path.join(__dirname, '../frontend')));
 // --- CONFIG ---
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://kfibmwbwdcejrsuahbps.supabase.co';
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const LEGACY_API_KEY = process.env.CLAWSIGHT_API_KEY || process.env.AGENTWATCH_API_KEY || "test-key-123";
+const LEGACY_API_KEY = process.env.CLAWSIGHT_API_KEY || process.env.AGENTWATCH_API_KEY || null;
 
 // Supabase Admin Client (Server Side Only)
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
+const ALLOWED_ORIGINS = process.env.CORS_ORIGINS
+  ? process.env.CORS_ORIGINS.split(',').map(s => s.trim())
+  : ['https://app.clawsight.org'];
+
 const io = new Server(server, {
-  cors: { origin: "*", methods: ["GET", "POST"] }
+  cors: { origin: ALLOWED_ORIGINS, methods: ["GET", "POST"] }
 });
 
 // --- IN-MEMORY STATE (Performance Cache) ---
@@ -29,6 +33,41 @@ let activeAgents = {};
 
 // Track which socket owns which agent (for disconnect cleanup)
 const socketAgentMap = new Map(); // socketId -> Set<agentId>
+
+// Share snapshots (in-memory, keyed by shareId)
+const shareSnapshots = new Map();
+
+// --- INPUT VALIDATION ---
+const MAX_AGENT_NAME_LEN = 200;
+const MAX_AGENT_ID_LEN = 100;
+const MAX_LOG_MESSAGE_LEN = 2000;
+const MAX_AGENTS_PER_TENANT = 50;
+const MAX_LOGS_PER_AGENT = 50;
+
+function sanitizeString(str, maxLen) {
+  if (typeof str !== 'string') return '';
+  return str.slice(0, maxLen);
+}
+
+function isValidNumber(val) {
+  return typeof val === 'number' && isFinite(val) && val >= 0 && val <= 1e9;
+}
+
+// --- RATE LIMITING ---
+const rateLimitMap = new Map(); // socketId -> { count, resetTime }
+const RATE_LIMIT_WINDOW_MS = 1000;
+const RATE_LIMIT_MAX_EVENTS = 30;
+
+function checkRateLimit(socketId) {
+  const now = Date.now();
+  let entry = rateLimitMap.get(socketId);
+  if (!entry || now > entry.resetTime) {
+    entry = { count: 0, resetTime: now + RATE_LIMIT_WINDOW_MS };
+    rateLimitMap.set(socketId, entry);
+  }
+  entry.count++;
+  return entry.count <= RATE_LIMIT_MAX_EVENTS;
+}
 
 function buildDemoAgent(tenantId) {
   const now = Date.now();
@@ -197,6 +236,40 @@ app.post('/api/dashboard-key', async (req, res) => {
   res.json({ key: rawKey });
 });
 
+// Share Agent Snapshot
+app.post('/api/share', async (req, res) => {
+  const { agentId } = req.body;
+  if (!agentId || typeof agentId !== 'string') return res.status(400).json({ error: 'Missing agentId' });
+
+  const agent = activeAgents[agentId];
+  if (!agent) return res.status(404).json({ error: 'Agent not found' });
+
+  const shareId = uuidv4();
+  const snapshot = {
+    id: agent.id,
+    name: agent.name,
+    status: agent.status,
+    metrics: { ...agent.metrics },
+    logs: [...agent.logs],
+    timestamp: Date.now()
+  };
+
+  shareSnapshots.set(shareId, snapshot);
+
+  // Auto-expire after 24 hours
+  setTimeout(() => shareSnapshots.delete(shareId), 24 * 60 * 60 * 1000);
+
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
+  res.json({ url: `${baseUrl}/share.html?id=${shareId}` });
+});
+
+// Get Shared Snapshot
+app.get('/api/share/:id', (req, res) => {
+  const snapshot = shareSnapshots.get(req.params.id);
+  if (!snapshot) return res.status(404).json({ error: 'Share link expired or not found' });
+  res.json(snapshot);
+});
+
 // Check if user is new or returning (has agents/keys)
 app.get('/api/user/status', async (req, res) => {
   const authHeader = req.headers.authorization;
@@ -228,8 +301,8 @@ io.use(async (socket, next) => {
   const token = socket.handshake.auth.token;
   if (!token) return next(new Error("No token provided"));
 
-  // 1. Legacy Master Key Check
-  if (token === LEGACY_API_KEY) {
+  // 1. Legacy Master Key Check (only if key is configured via env var)
+  if (LEGACY_API_KEY && token === LEGACY_API_KEY) {
     socket.user = { role: 'admin', tenantId: 'legacy_admin' };
     return next();
   }
@@ -298,9 +371,15 @@ io.on('connection', (socket) => {
   // Agent Register
   socket.on('register-agent', (agent) => {
     if (!agent || !agent.id) return;
+    if (!checkRateLimit(socket.id)) return;
+
+    // Enforce per-tenant agent limit
+    const tenantAgentCount = Object.values(activeAgents).filter(a => a.tenantId === tenantId).length;
+    if (tenantAgentCount >= MAX_AGENTS_PER_TENANT && !activeAgents[agent.id]) return;
 
     const safeAgent = {
-      ...agent,
+      id: sanitizeString(agent.id, MAX_AGENT_ID_LEN),
+      name: sanitizeString(agent.name || agent.id, MAX_AGENT_NAME_LEN),
       tenantId: tenantId,
       lastHeartbeat: Date.now(),
       status: agent.status || 'idle',
@@ -308,11 +387,11 @@ io.on('connection', (socket) => {
       metrics: { cost: 0, tokens: 0, revenue: 0 }
     };
 
-    activeAgents[agent.id] = safeAgent;
+    activeAgents[safeAgent.id] = safeAgent;
 
     // Track which agents this socket owns (for disconnect cleanup)
     if (!socketAgentMap.has(socket.id)) socketAgentMap.set(socket.id, new Set());
-    socketAgentMap.get(socket.id).add(agent.id);
+    socketAgentMap.get(socket.id).add(safeAgent.id);
 
     // Broadcast to this Tenant Only
     io.to(`tenant:${tenantId}`).emit('agent-update', safeAgent);
@@ -322,24 +401,34 @@ io.on('connection', (socket) => {
   // Agent Log
   socket.on('agent-log', (data) => {
     if (!data || !data.id || !activeAgents[data.id]) return;
+    if (!checkRateLimit(socket.id)) return;
+
     const agent = activeAgents[data.id];
 
     // Security: Ensure Agent belongs to this socket's tenant
     if (agent.tenantId !== tenantId && tenantId !== 'legacy_admin') return;
 
     agent.lastHeartbeat = Date.now();
-    agent.status = data.status || agent.status;
+
+    const allowedStatuses = ['idle', 'working', 'error', 'killed', 'offline', 'complete'];
+    if (data.status && allowedStatuses.includes(data.status)) {
+      agent.status = data.status;
+    }
 
     if (data.message) {
-      agent.logs.push({ timestamp: Date.now(), message: data.message });
-      if (agent.logs.length > 50) agent.logs.shift();
+      const msg = sanitizeString(data.message, MAX_LOG_MESSAGE_LEN);
+      agent.logs.push({ timestamp: Date.now(), message: msg });
+      if (agent.logs.length > MAX_LOGS_PER_AGENT) agent.logs.shift();
     }
 
     if (data.metrics) {
       if (!agent.metrics) agent.metrics = { cost: 0, tokens: 0, revenue: 0 };
-      if (data.metrics.cost) agent.metrics.cost += Number(data.metrics.cost);
-      if (data.metrics.revenue) agent.metrics.revenue += Number(data.metrics.revenue);
-      if (data.metrics.tokens) agent.metrics.tokens += Number(data.metrics.tokens);
+      const costVal = Number(data.metrics.cost);
+      const revenueVal = Number(data.metrics.revenue);
+      const tokensVal = Number(data.metrics.tokens);
+      if (isValidNumber(costVal)) agent.metrics.cost += costVal;
+      if (isValidNumber(revenueVal)) agent.metrics.revenue += revenueVal;
+      if (isValidNumber(tokensVal)) agent.metrics.tokens += tokensVal;
     }
 
     io.to(`tenant:${agent.tenantId}`).emit('agent-update', agent);
@@ -365,7 +454,10 @@ io.on('connection', (socket) => {
 
   // Cleanup on disconnect
   socket.on('disconnect', () => {
-    console.log(`❌ Disconnected: ${socket.id} (Role: ${role})`);
+    console.log(`Disconnected: ${socket.id} (Role: ${role})`);
+
+    // Clean up rate limit tracking
+    rateLimitMap.delete(socket.id);
 
     // Mark agents owned by this socket as disconnected
     const ownedAgents = socketAgentMap.get(socket.id);

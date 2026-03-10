@@ -96,14 +96,21 @@
       document.getElementById('metric-tokens').textContent = (agent.metrics?.tokens || 0).toLocaleString();
       document.getElementById('timestamp').textContent = new Date(agent.timestamp || Date.now()).toLocaleTimeString();
 
+      function escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+      }
+
       const logsContainer = document.getElementById('logs-container');
       if (agent.logs && agent.logs.length > 0) {
-        logsContainer.innerHTML = agent.logs.map(l => 
-          `<div class="border-l-2 border-gray-700 pl-2 hover:bg-gray-800/50 transition">
+        logsContainer.innerHTML = agent.logs.map(l => {
+          const safe = escapeHtml(l.message);
+          return `<div class="border-l-2 border-gray-700 pl-2 hover:bg-gray-800/50 transition">
              <span class="text-gray-500 text-xs mr-2">[${new Date(l.timestamp).toLocaleTimeString()}]</span>
-             <span class="${l.message.includes('ERROR') ? 'text-red-400' : 'text-gray-300'}">${l.message}</span>
-           </div>`
-        ).join('');
+             <span class="${l.message.includes('ERROR') ? 'text-red-400' : 'text-gray-300'}">${safe}</span>
+           </div>`;
+        }).join('');
       } else {
         logsContainer.innerHTML = '<div class="text-gray-500 italic">No logs recorded for this session.</div>';
       }
