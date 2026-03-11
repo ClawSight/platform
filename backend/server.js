@@ -303,8 +303,11 @@ app.get('/api/user/status', async (req, res) => {
 });
 
 // Catch-all: serve landing page for any unmatched GET route
-app.get('*', (req, res) => {
-  res.sendFile(path.join(frontendDir, 'index.html'));
+app.use((req, res, next) => {
+  if (req.method === 'GET' && req.accepts('html')) {
+    return res.sendFile(path.join(frontendDir, 'index.html'));
+  }
+  next();
 });
 
 // --- REALTIME SOCKETS ---
