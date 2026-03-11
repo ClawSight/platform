@@ -227,7 +227,7 @@ watcher.<span class="text-yellow-300">metric</span>(<span class="text-amber-400"
 
         const { data: { session } } = await supabaseClient.auth.getSession();
         if (!session) {
-          window.location.href = '/';
+          window.location.replace('/');
           return;
         }
 
@@ -332,7 +332,7 @@ watcher.<span class="text-yellow-300">metric</span>(<span class="text-amber-400"
           }
 
           localStorage.removeItem('clawsight_api_key');
-          window.location.href = '/';
+          window.location.replace('/');
         });
 
         socket.on('agent-update', (agent) => {
@@ -544,7 +544,7 @@ watcher.<span class="text-yellow-300">metric</span>(<span class="text-amber-400"
       async function getToken() {
         if (sessionToken) return sessionToken;
         const { data: { session } } = await supabaseClient.auth.getSession();
-        if (!session) { window.location.href = '/'; return null; }
+        if (!session) { window.location.replace('/'); return null; }
         sessionToken = session.access_token;
         return sessionToken;
       }
@@ -723,7 +723,7 @@ watcher.<span class="text-yellow-300">metric</span>(<span class="text-amber-400"
       window.logout = async () => {
         localStorage.removeItem('clawsight_api_key');
         await supabaseClient.auth.signOut();
-        window.location.href = '/';
+        window.location.replace('/');
       };
     })();
   </script>

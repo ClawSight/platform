@@ -12,6 +12,13 @@ const server = http.createServer(app);
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../frontend')));
 
+// Clean URL fallbacks (so /dashboard works without .html)
+const frontendDir = path.join(__dirname, '../frontend');
+app.get('/dashboard', (req, res) => res.sendFile(path.join(frontendDir, 'dashboard.html')));
+app.get('/share', (req, res) => res.sendFile(path.join(frontendDir, 'share.html')));
+app.get('/terms', (req, res) => res.sendFile(path.join(frontendDir, 'terms.html')));
+app.get('/privacy', (req, res) => res.sendFile(path.join(frontendDir, 'privacy.html')));
+
 // --- CONFIG ---
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://kfibmwbwdcejrsuahbps.supabase.co';
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -293,6 +300,11 @@ app.get('/api/user/status', async (req, res) => {
 
   const hasAgentKeys = keys && keys.length > 0;
   return res.json({ isNew: false, hasKeys: hasAgentKeys });
+});
+
+// Catch-all: serve landing page for any unmatched GET route
+app.get('*', (req, res) => {
+  res.sendFile(path.join(frontendDir, 'index.html'));
 });
 
 // --- REALTIME SOCKETS ---
