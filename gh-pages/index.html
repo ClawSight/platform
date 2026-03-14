@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- SEO & LLM Optimization -->
+  <title>ClawSight — See what your AI agents are doing</title>
+  <meta name="description" content="Monitor costs, read logs, and kill runaway bots from one dashboard. Free, open source, takes 2 minutes to set up.">
+  <meta name="keywords" content="AI agents, LLM monitoring, autonomous agents, observability, token tracking, kill switch, OpenClaw, developer tools">
+  <meta name="author" content="ClawSight">
+  <link rel="canonical" href="https://www.clawsight.org/">
+
+  <!-- Favicon (Eyes Emoji) -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>👀</text></svg>">
+
+  <!-- Open Graph / Social -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://www.clawsight.org/">
+  <meta property="og:title" content="ClawSight — See what your AI agents are doing">
+  <meta property="og:description" content="Monitor costs, read logs, and kill runaway bots from one dashboard. Free, open source.">
+  <meta property="og:image" content="https://clawsight.github.io/og-image.png">
+
+  <!-- Twitter -->
+  <meta property="twitter:card" content="summary_large_image">
+  <meta property="twitter:url" content="https://www.clawsight.org/">
+  <meta property="twitter:title" content="ClawSight — See what your AI agents are doing">
+  <meta property="twitter:description" content="Monitor costs, read logs, and kill runaway bots from one dashboard. Free, open source.">
+
+  <!-- LLM Structured Data (JSON-LD) -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "ClawSight",
+    "operatingSystem": "Cloud, Linux, macOS",
+    "applicationCategory": "DeveloperApplication",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "description": "ClawSight is an open-source observability platform designed for autonomous AI agents. It provides real-time logging, token usage analytics, and remote process termination capabilities.",
+    "softwareRequirements": "Node.js",
+    "url": "https://www.clawsight.org",
+    "author": {
+      "@type": "Organization",
+      "name": "ClawSight"
+    }
+  }
+  </script>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+        }
+      }
+    }
+  </script>
+  <style>
+    * { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+    @keyframes fade-up { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes slide-in-right { from { opacity: 0; transform: translateX(40px); } to { opacity: 1; transform: translateX(0); } }
+    @keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+    @keyframes glow { 0%, 100% { opacity: 0.4; } 50% { opacity: 0.8; } }
+    @keyframes typing { from { width: 0; } to { width: 100%; } }
+    @keyframes blink { 50% { border-color: transparent; } }
+    .fade-up { opacity: 0; animation: fade-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+    .fade-in { opacity: 0; animation: fade-in 0.6s ease-out forwards; }
+    .delay-1 { animation-delay: 0.1s; }
+    .delay-2 { animation-delay: 0.2s; }
+    .delay-3 { animation-delay: 0.3s; }
+    .delay-4 { animation-delay: 0.4s; }
+    .delay-5 { animation-delay: 0.5s; }
+    .delay-6 { animation-delay: 0.6s; }
+    .delay-7 { animation-delay: 0.7s; }
+    .pulse-dot { animation: pulse-dot 2s ease-in-out infinite; }
+    .glow { animation: glow 3s ease-in-out infinite; }
+    .gradient-border { background: linear-gradient(135deg, rgba(16,185,129,0.2), rgba(59,130,246,0.2)); }
+    .glass { backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+    .grid-bg {
+      background-image:
+        linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+      background-size: 64px 64px;
+    }
+    .hero-glow {
+      background: radial-gradient(ellipse 600px 400px at 50% 0%, rgba(16,185,129,0.08), transparent);
+    }
+    .card-hover { transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+    .card-hover:hover { transform: translateY(-2px); border-color: rgba(255,255,255,0.1); }
+    .log-line { animation: fade-in 0.3s ease-out forwards; }
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #1f2937; border-radius: 2px; }
+  </style>
+</head>
+
+<body class="bg-[#0a0a0f] text-white font-sans antialiased overflow-x-hidden">
+
+  <!-- NAV -->
+  <nav class="fixed top-0 w-full z-50 glass bg-[#0a0a0f]/80 border-b border-white/5">
+    <div class="max-w-7xl mx-auto px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center gap-8">
+        <a href="/" class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+            <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+          </div>
+          <span class="text-[15px] font-bold tracking-tight text-white">ClawSight</span>
+        </a>
+        <div class="hidden md:flex items-center gap-6">
+          <a href="#features" class="text-[13px] text-gray-500 hover:text-white transition-colors">Features</a>
+          <a href="#integration" class="text-[13px] text-gray-500 hover:text-white transition-colors">Integration</a>
+          <a href="https://github.com/ClawSight/platform#readme" target="_blank" class="text-[13px] text-gray-500 hover:text-white transition-colors">Docs</a>
+        </div>
+      </div>
+      <div class="flex items-center gap-4">
+        <a href="https://github.com/ClawSight/platform" target="_blank" class="hidden sm:flex items-center gap-2 text-[13px] text-gray-500 hover:text-white transition-colors">
+          <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+          GitHub
+        </a>
+        <a href="#login" class="text-[13px] font-medium text-emerald-400 hover:text-emerald-300 transition-colors">Sign in</a>
+        <a href="#login" class="bg-white text-black text-[13px] font-semibold px-4 py-2 rounded-lg hover:bg-gray-200 transition-all">
+          Get started
+        </a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- HERO -->
+  <section class="relative pt-32 pb-24 lg:pt-44 lg:pb-32 hero-glow grid-bg">
+    <div class="max-w-7xl mx-auto px-6 lg:px-8">
+      <div class="max-w-4xl">
+
+        <!-- Badge -->
+        <div class="fade-up delay-1 mb-8">
+          <div class="inline-flex items-center gap-2.5 text-[13px] font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-4 py-1.5">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-dot"></span>
+            Open source &mdash; free forever
+          </div>
+        </div>
+
+        <!-- Headline -->
+        <h1 class="fade-up delay-2 text-[clamp(2.5rem,6vw,4.5rem)] font-black tracking-tight leading-[1.05] text-white mb-6">
+          See what your AI agents<br>
+          <span class="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400">are doing right now</span>
+        </h1>
+
+        <!-- Subheadline -->
+        <p class="fade-up delay-3 text-lg lg:text-xl text-gray-400 max-w-2xl leading-relaxed mb-10">
+          Your bots run in the background. ClawSight shows you what they're up to &mdash; costs, logs, status &mdash; and lets you kill them when something goes wrong.
+        </p>
+
+        <!-- CTAs -->
+        <div class="fade-up delay-4 flex flex-wrap gap-3 mb-6">
+          <a href="#login" class="bg-white text-black font-semibold text-[15px] px-7 py-3.5 rounded-xl hover:bg-gray-200 transition-all shadow-lg shadow-white/5">
+            Start monitoring free
+          </a>
+          <a href="https://github.com/ClawSight/platform#readme" target="_blank" class="font-semibold text-[15px] px-7 py-3.5 rounded-xl border border-white/10 text-gray-300 hover:text-white hover:border-white/25 transition-all">
+            View documentation
+          </a>
+        </div>
+
+        <!-- Trust line -->
+        <p class="fade-up delay-5 text-[13px] text-gray-600">
+          100% free &middot; No credit card &middot; Self-host or use our cloud
+        </p>
+      </div>
+    </div>
+
+    <!-- HERO DASHBOARD MOCK -->
+    <div class="max-w-7xl mx-auto px-6 lg:px-8 mt-16 lg:mt-24">
+      <div class="fade-up delay-6 relative">
+        <!-- Glow behind -->
+        <div class="absolute -inset-4 bg-gradient-to-b from-emerald-500/5 via-transparent to-transparent rounded-3xl blur-xl"></div>
+
+        <div class="relative bg-[#0d0d14] border border-white/[0.06] rounded-2xl overflow-hidden shadow-2xl shadow-black/50">
+
+          <!-- Window chrome -->
+          <div class="flex items-center gap-3 px-5 py-3.5 border-b border-white/[0.06] bg-[#0d0d14]">
+            <div class="flex gap-1.5">
+              <div class="w-3 h-3 rounded-full bg-[#ff5f57]"></div>
+              <div class="w-3 h-3 rounded-full bg-[#febc2e]"></div>
+              <div class="w-3 h-3 rounded-full bg-[#28c840]"></div>
+            </div>
+            <div class="flex-1 flex justify-center">
+              <div class="bg-white/5 rounded-md px-4 py-1 text-[11px] text-gray-500 font-mono">app.clawsight.org/dashboard</div>
+            </div>
+            <div class="w-[52px]"></div>
+          </div>
+
+          <!-- Dashboard header bar -->
+          <div class="flex items-center justify-between px-5 py-3 border-b border-white/[0.06] bg-white/[0.01]">
+            <div class="flex items-center gap-3">
+              <span class="text-[13px] font-bold text-emerald-400 tracking-wide">CLAWSIGHT</span>
+              <span class="text-[10px] text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 font-mono">CONNECTED</span>
+            </div>
+            <div class="hidden sm:flex gap-2 text-[10px]">
+              <span class="bg-white/5 text-white px-3 py-1 rounded font-bold">DASHBOARD</span>
+              <span class="text-gray-600 px-3 py-1">SETUP</span>
+              <span class="text-gray-600 px-3 py-1">API KEYS</span>
+            </div>
+          </div>
+
+          <!-- Stats bar -->
+          <div class="grid grid-cols-2 sm:grid-cols-4 border-b border-white/[0.06] bg-white/[0.015]">
+            <div class="px-5 py-3 text-center">
+              <div class="text-[9px] text-gray-600 uppercase tracking-widest font-bold">Active</div>
+              <div class="text-xl font-bold text-white mt-0.5">3</div>
+            </div>
+            <div class="px-5 py-3 text-center border-l border-white/[0.04]">
+              <div class="text-[9px] text-gray-600 uppercase tracking-widest font-bold">Revenue</div>
+              <div class="text-xl font-bold text-emerald-400 mt-0.5">$1,247.80</div>
+            </div>
+            <div class="px-5 py-3 text-center border-l border-white/[0.04]">
+              <div class="text-[9px] text-gray-600 uppercase tracking-widest font-bold">Cost</div>
+              <div class="text-xl font-bold text-red-400 mt-0.5">$84.32</div>
+            </div>
+            <div class="px-5 py-3 text-center border-l border-white/[0.04]">
+              <div class="text-[9px] text-gray-600 uppercase tracking-widest font-bold">Profit</div>
+              <div class="text-xl font-bold text-emerald-400 mt-0.5">+$1,163.48</div>
+            </div>
+          </div>
+
+          <!-- Agent cards -->
+          <div class="p-5 grid grid-cols-1 md:grid-cols-3 gap-3">
+
+            <!-- Agent 1 -->
+            <div class="bg-[#0a0a10] border border-white/[0.06] rounded-lg overflow-hidden">
+              <div class="flex items-center justify-between px-3 py-2.5 border-b border-white/[0.04]">
+                <div>
+                  <div class="text-[13px] font-bold text-white">Trade Executor</div>
+                  <div class="text-[9px] text-gray-600 font-mono">agent-trade-01</div>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <span class="text-[9px] text-gray-500 uppercase">working</span>
+                  <div class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                </div>
+              </div>
+              <div class="grid grid-cols-3 text-center py-2 bg-black/30 border-b border-white/[0.04]">
+                <div><div class="text-[8px] text-gray-600">COST</div><div class="text-[11px] font-mono text-red-400">$42.18</div></div>
+                <div class="border-l border-white/[0.03]"><div class="text-[8px] text-gray-600">REV</div><div class="text-[11px] font-mono text-emerald-400">$892.40</div></div>
+                <div class="border-l border-white/[0.03]"><div class="text-[8px] text-gray-600">PROFIT</div><div class="text-[11px] font-mono font-bold text-emerald-400">+$850.22</div></div>
+              </div>
+              <div class="px-3 py-2 space-y-1">
+                <div class="text-[10px] font-mono text-gray-500 border-l-2 border-emerald-500/40 pl-2"><span class="text-gray-600">14:23:08</span> Executed BTC/USDT long +2.4%</div>
+                <div class="text-[10px] font-mono text-gray-500 border-l-2 border-gray-800 pl-2"><span class="text-gray-600">14:22:55</span> Analyzing market momentum</div>
+                <div class="text-[10px] font-mono text-gray-500 border-l-2 border-gray-800 pl-2"><span class="text-gray-600">14:22:41</span> Scanning 12 pairs for entry</div>
+              </div>
+            </div>
+
+            <!-- Agent 2 -->
+            <div class="bg-[#0a0a10] border border-white/[0.06] rounded-lg overflow-hidden">
+              <div class="flex items-center justify-between px-3 py-2.5 border-b border-white/[0.04]">
+                <div>
+                  <div class="text-[13px] font-bold text-white">Content Pipeline</div>
+                  <div class="text-[9px] text-gray-600 font-mono">agent-content-03</div>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <span class="text-[9px] text-gray-500 uppercase">working</span>
+                  <div class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                </div>
+              </div>
+              <div class="grid grid-cols-3 text-center py-2 bg-black/30 border-b border-white/[0.04]">
+                <div><div class="text-[8px] text-gray-600">COST</div><div class="text-[11px] font-mono text-red-400">$28.90</div></div>
+                <div class="border-l border-white/[0.03]"><div class="text-[8px] text-gray-600">REV</div><div class="text-[11px] font-mono text-emerald-400">$240.00</div></div>
+                <div class="border-l border-white/[0.03]"><div class="text-[8px] text-gray-600">PROFIT</div><div class="text-[11px] font-mono font-bold text-emerald-400">+$211.10</div></div>
+              </div>
+              <div class="px-3 py-2 space-y-1">
+                <div class="text-[10px] font-mono text-gray-500 border-l-2 border-blue-500/40 pl-2"><span class="text-gray-600">14:23:02</span> Published 3 articles to CMS</div>
+                <div class="text-[10px] font-mono text-gray-500 border-l-2 border-gray-800 pl-2"><span class="text-gray-600">14:22:48</span> Generating SEO metadata</div>
+                <div class="text-[10px] font-mono text-gray-500 border-l-2 border-gray-800 pl-2"><span class="text-gray-600">14:22:30</span> Drafting batch: 5 posts</div>
+              </div>
+            </div>
+
+            <!-- Agent 3 -->
+            <div class="bg-[#0a0a10] border border-white/[0.06] rounded-lg overflow-hidden">
+              <div class="flex items-center justify-between px-3 py-2.5 border-b border-white/[0.04]">
+                <div>
+                  <div class="text-[13px] font-bold text-white">Support Triage</div>
+                  <div class="text-[9px] text-gray-600 font-mono">agent-support-07</div>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <span class="text-[9px] text-gray-500 uppercase">working</span>
+                  <div class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                </div>
+              </div>
+              <div class="grid grid-cols-3 text-center py-2 bg-black/30 border-b border-white/[0.04]">
+                <div><div class="text-[8px] text-gray-600">COST</div><div class="text-[11px] font-mono text-red-400">$13.24</div></div>
+                <div class="border-l border-white/[0.03]"><div class="text-[8px] text-gray-600">REV</div><div class="text-[11px] font-mono text-emerald-400">$115.40</div></div>
+                <div class="border-l border-white/[0.03]"><div class="text-[8px] text-gray-600">PROFIT</div><div class="text-[11px] font-mono font-bold text-emerald-400">+$102.16</div></div>
+              </div>
+              <div class="px-3 py-2 space-y-1">
+                <div class="text-[10px] font-mono text-gray-500 border-l-2 border-amber-500/40 pl-2"><span class="text-gray-600">14:22:59</span> Escalated ticket #4821 to L2</div>
+                <div class="text-[10px] font-mono text-gray-500 border-l-2 border-gray-800 pl-2"><span class="text-gray-600">14:22:44</span> Auto-resolved 8 tickets</div>
+                <div class="text-[10px] font-mono text-gray-500 border-l-2 border-gray-800 pl-2"><span class="text-gray-600">14:22:31</span> Processing inbox: 23 new</div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section id="features" class="py-24 lg:py-32 border-t border-white/[0.04]">
+    <div class="max-w-7xl mx-auto px-6 lg:px-8">
+
+      <div class="max-w-2xl mb-16">
+        <p class="text-[13px] font-semibold text-emerald-400 uppercase tracking-wider mb-3">What you get</p>
+        <h2 class="text-3xl lg:text-4xl font-bold tracking-tight text-white mb-5">
+          Everything you need to keep your bots in check
+        </h2>
+        <p class="text-gray-500 text-lg leading-relaxed">
+          Built for people who run AI agents and need to know what's happening without staring at terminal logs all day.
+        </p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+
+        <!-- Feature 1 -->
+        <div class="card-hover bg-white/[0.02] border border-white/[0.06] rounded-xl p-6">
+          <div class="w-10 h-10 rounded-lg bg-emerald-500/10 border border-emerald-500/15 flex items-center justify-center mb-5">
+            <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          </div>
+          <h3 class="text-[15px] font-bold text-white mb-2">See every dollar</h3>
+          <p class="text-[14px] text-gray-500 leading-relaxed">
+            Know exactly what each agent costs you and what it earns. Cost, revenue, and profit updated in real time. No more surprise API bills.
+          </p>
+        </div>
+
+        <!-- Feature 2 -->
+        <div class="card-hover bg-white/[0.02] border border-white/[0.06] rounded-xl p-6">
+          <div class="w-10 h-10 rounded-lg bg-blue-500/10 border border-blue-500/15 flex items-center justify-center mb-5">
+            <svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12"/></svg>
+          </div>
+          <h3 class="text-[15px] font-bold text-white mb-2">Live logs</h3>
+          <p class="text-[14px] text-gray-500 leading-relaxed">
+            Watch what each bot is thinking and doing as it happens. No more guessing, no more tailing log files on a remote server.
+          </p>
+        </div>
+
+        <!-- Feature 3 -->
+        <div class="card-hover bg-white/[0.02] border border-white/[0.06] rounded-xl p-6">
+          <div class="w-10 h-10 rounded-lg bg-red-500/10 border border-red-500/15 flex items-center justify-center mb-5">
+            <svg class="w-5 h-5 text-red-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5.636 5.636a9 9 0 1012.728 0M12 3v9"/></svg>
+          </div>
+          <h3 class="text-[15px] font-bold text-white mb-2">Kill switch</h3>
+          <p class="text-[14px] text-gray-500 leading-relaxed">
+            Bot stuck in a loop burning cash? One click. Done. No SSH, no redeploying. Just click "kill" and it stops.
+          </p>
+        </div>
+
+        <!-- Feature 4 -->
+        <div class="card-hover bg-white/[0.02] border border-white/[0.06] rounded-xl p-6">
+          <div class="w-10 h-10 rounded-lg bg-violet-500/10 border border-violet-500/15 flex items-center justify-center mb-5">
+            <svg class="w-5 h-5 text-violet-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186l9.566-5.314m-9.566 7.5l9.566 5.314m0 0a2.25 2.25 0 103.935 2.186 2.25 2.25 0 00-3.935-2.186zm0-12.814a2.25 2.25 0 103.933-2.185 2.25 2.25 0 00-3.933 2.185z"/></svg>
+          </div>
+          <h3 class="text-[15px] font-bold text-white mb-2">Share with anyone</h3>
+          <p class="text-[14px] text-gray-500 leading-relaxed">
+            Generate a share link for any agent. Send it to a client, teammate, or friend. They see the live view without needing an account.
+          </p>
+        </div>
+
+        <!-- Feature 5 -->
+        <div class="card-hover bg-white/[0.02] border border-white/[0.06] rounded-xl p-6">
+          <div class="w-10 h-10 rounded-lg bg-amber-500/10 border border-amber-500/15 flex items-center justify-center mb-5">
+            <svg class="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z"/></svg>
+          </div>
+          <h3 class="text-[15px] font-bold text-white mb-2">API keys</h3>
+          <p class="text-[14px] text-gray-500 leading-relaxed">
+            Create a key for each bot or project. Revoke any key instantly if something goes wrong. Simple and straightforward.
+          </p>
+        </div>
+
+        <!-- Feature 6 -->
+        <div class="card-hover bg-white/[0.02] border border-white/[0.06] rounded-xl p-6">
+          <div class="w-10 h-10 rounded-lg bg-cyan-500/10 border border-cyan-500/15 flex items-center justify-center mb-5">
+            <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125"/></svg>
+          </div>
+          <h3 class="text-[15px] font-bold text-white mb-2">Self-host it</h3>
+          <p class="text-[14px] text-gray-500 leading-relaxed">
+            Don't want to use our cloud? Clone the repo and run it yourself. MIT-licensed, no tracking, no phoning home. It's yours.
+          </p>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- INTEGRATION -->
+  <section id="integration" class="py-24 lg:py-32 border-t border-white/[0.04] grid-bg">
+    <div class="max-w-7xl mx-auto px-6 lg:px-8">
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+
+        <div>
+          <p class="text-[13px] font-semibold text-emerald-400 uppercase tracking-wider mb-3">Setup</p>
+          <h2 class="text-3xl lg:text-4xl font-bold tracking-tight text-white mb-5">
+            Add 4 lines to your bot.<br>That's it.
+          </h2>
+          <p class="text-gray-500 text-lg leading-relaxed mb-8">
+            npm install, paste the snippet, run your bot. Logs and costs show up on your dashboard instantly.
+          </p>
+
+          <div class="space-y-4">
+            <div class="flex items-start gap-3">
+              <div class="w-6 h-6 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mt-0.5 shrink-0">
+                <svg class="w-3 h-3 text-emerald-400" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/></svg>
+              </div>
+              <div>
+                <div class="text-[14px] font-semibold text-white">Tiny package</div>
+                <div class="text-[13px] text-gray-500">Zero dependencies. Under 5KB. Won't bloat your project.</div>
+              </div>
+            </div>
+            <div class="flex items-start gap-3">
+              <div class="w-6 h-6 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mt-0.5 shrink-0">
+                <svg class="w-3 h-3 text-emerald-400" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/></svg>
+              </div>
+              <div>
+                <div class="text-[14px] font-semibold text-white">Instant updates</div>
+                <div class="text-[13px] text-gray-500">Logs show up in under a second. Auto-reconnects if connection drops.</div>
+              </div>
+            </div>
+            <div class="flex items-start gap-3">
+              <div class="w-6 h-6 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mt-0.5 shrink-0">
+                <svg class="w-3 h-3 text-emerald-400" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/></svg>
+              </div>
+              <div>
+                <div class="text-[14px] font-semibold text-white">Remote kill</div>
+                <div class="text-[13px] text-gray-500">Click "kill" on the dashboard and your bot shuts down cleanly.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Code block -->
+        <div>
+          <div class="bg-[#0d0d14] border border-white/[0.06] rounded-xl overflow-hidden shadow-2xl shadow-black/30">
+            <div class="flex items-center justify-between px-4 py-3 border-b border-white/[0.06]">
+              <div class="flex items-center gap-3">
+                <div class="flex gap-1.5">
+                  <div class="w-2.5 h-2.5 rounded-full bg-white/10"></div>
+                  <div class="w-2.5 h-2.5 rounded-full bg-white/10"></div>
+                  <div class="w-2.5 h-2.5 rounded-full bg-white/10"></div>
+                </div>
+                <span class="text-[11px] text-gray-600 font-mono">agent.js</span>
+              </div>
+              <button onclick="copySnippet()" id="copy-btn" class="text-[11px] text-gray-600 hover:text-white font-mono transition-colors px-2 py-1 rounded hover:bg-white/5">copy</button>
+            </div>
+            <div class="p-5 overflow-x-auto">
+              <pre class="text-[13px] font-mono leading-relaxed" id="code-snippet"><span class="text-gray-600">// 1. Install</span>
+<span class="text-gray-600">// npm install clawsight</span>
+
+<span class="text-[#c678dd]">const</span> <span class="text-[#e06c75]">monitor</span> = <span class="text-[#61afef]">require</span>(<span class="text-[#98c379]">'clawsight'</span>);
+
+<span class="text-[#c678dd]">const</span> <span class="text-[#e06c75]">agent</span> = <span class="text-[#61afef]">monitor</span>({
+  <span class="text-[#e06c75]">server</span>: <span class="text-[#98c379]">'https://app.clawsight.org'</span>,
+  <span class="text-[#e06c75]">token</span>:  <span class="text-[#98c379]">'YOUR_API_KEY'</span>
+});
+
+<span class="text-gray-600">// 2. Initialize your agent</span>
+<span class="text-[#e06c75]">agent</span>.<span class="text-[#61afef]">init</span>({
+  <span class="text-[#e06c75]">id</span>:   <span class="text-[#98c379]">'trade-executor-01'</span>,
+  <span class="text-[#e06c75]">name</span>: <span class="text-[#98c379]">'Trade Executor'</span>
+});
+
+<span class="text-gray-600">// 3. Log actions and track costs</span>
+<span class="text-[#e06c75]">agent</span>.<span class="text-[#61afef]">log</span>(<span class="text-[#98c379]">'Scanning 12 pairs for entry'</span>);
+<span class="text-[#e06c75]">agent</span>.<span class="text-[#61afef]">metric</span>(<span class="text-[#98c379]">'cost'</span>, <span class="text-[#d19a66]">0.003</span>);
+<span class="text-[#e06c75]">agent</span>.<span class="text-[#61afef]">metric</span>(<span class="text-[#98c379]">'revenue'</span>, <span class="text-[#d19a66]">24.50</span>);</pre>
+            </div>
+          </div>
+
+          <!-- Terminal output simulation -->
+          <div class="mt-3 bg-[#0d0d14] border border-white/[0.06] rounded-xl overflow-hidden">
+            <div class="flex items-center gap-2 px-4 py-2.5 border-b border-white/[0.06]">
+              <div class="w-2 h-2 rounded-full bg-emerald-500/60"></div>
+              <span class="text-[11px] text-gray-600 font-mono">terminal</span>
+            </div>
+            <div class="px-4 py-3">
+              <div class="text-[12px] font-mono text-gray-600">$ npm install clawsight</div>
+              <div class="text-[12px] font-mono text-gray-500 mt-1">added 1 package in 0.8s</div>
+              <div class="text-[12px] font-mono text-emerald-500/70 mt-1">&#10003; Connected to ClawSight dashboard</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- SOCIAL PROOF / NUMBERS -->
+  <section class="py-20 border-t border-white/[0.04]">
+    <div class="max-w-7xl mx-auto px-6 lg:px-8">
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
+        <div>
+          <div class="text-3xl lg:text-4xl font-bold text-white mb-1">MIT</div>
+          <div class="text-[13px] text-gray-600">Licensed</div>
+        </div>
+        <div>
+          <div class="text-3xl lg:text-4xl font-bold text-white mb-1">&lt;5KB</div>
+          <div class="text-[13px] text-gray-600">SDK size (gzipped)</div>
+        </div>
+        <div>
+          <div class="text-3xl lg:text-4xl font-bold text-white mb-1">&lt;50ms</div>
+          <div class="text-[13px] text-gray-600">Log latency</div>
+        </div>
+        <div>
+          <div class="text-3xl lg:text-4xl font-bold text-white mb-1">0</div>
+          <div class="text-[13px] text-gray-600">Dependencies</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA / LOGIN -->
+  <section id="login" class="py-24 lg:py-32 border-t border-white/[0.04] relative">
+    <div class="absolute inset-0 bg-gradient-to-b from-emerald-500/[0.03] to-transparent"></div>
+    <div class="relative max-w-md mx-auto px-6 text-center">
+
+      <h2 class="text-3xl lg:text-4xl font-bold tracking-tight text-white mb-4">
+        Try it now
+      </h2>
+      <p class="text-gray-500 text-lg mb-10">
+        Free forever. No credit card. Set up in 2 minutes.
+      </p>
+
+      <div class="bg-white/[0.03] border border-white/[0.08] rounded-2xl p-8">
+        <div id="login-form" class="space-y-3">
+          <input
+            type="email"
+            id="email"
+            class="w-full bg-white/[0.05] border border-white/[0.08] rounded-xl px-4 py-3.5 text-[15px] text-white focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none placeholder-gray-600 transition"
+            placeholder="you@company.com"
+            onkeydown="if(event.key==='Enter') handleLogin()"
+          >
+          <button
+            onclick="handleLogin()"
+            id="login-btn"
+            class="w-full bg-white text-black font-semibold py-3.5 px-4 rounded-xl transition-all text-[15px] hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed shadow-lg shadow-white/5"
+          >
+            Get started free
+          </button>
+          <p class="text-[13px] text-gray-600 mt-4">
+            We'll send a magic link to your email. No password required.
+          </p>
+        </div>
+
+        <div id="success-message" class="hidden">
+          <div class="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-8">
+            <div class="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mx-auto mb-4">
+              <svg class="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"/></svg>
+            </div>
+            <div class="text-white text-lg font-bold mb-2">Check your inbox</div>
+            <p class="text-gray-400 text-[14px]">Click the link we sent to sign in to your dashboard.</p>
+            <p class="text-gray-600 text-[13px] mt-4">
+              Didn't get it? Check spam, or
+              <button onclick="resetForm()" class="text-emerald-400 hover:text-emerald-300 font-medium transition-colors">try again</button>.
+            </p>
+          </div>
+        </div>
+
+        <div id="error-message" class="hidden mt-3">
+          <div class="bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 text-[13px] text-red-400"></div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="border-t border-white/[0.04] py-12">
+    <div class="max-w-7xl mx-auto px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row justify-between items-center gap-6">
+        <div class="flex items-center gap-2.5">
+          <div class="w-7 h-7 rounded-md bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+            <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+          </div>
+          <span class="text-[14px] font-semibold text-gray-400">ClawSight</span>
+        </div>
+        <div class="flex items-center gap-6 text-[13px] text-gray-600">
+          <a href="https://github.com/ClawSight/platform" target="_blank" class="hover:text-white transition-colors">GitHub</a>
+          <a href="https://github.com/ClawSight/platform#readme" target="_blank" class="hover:text-white transition-colors">Docs</a>
+          <a href="https://app.clawsight.org/terms.html" class="hover:text-white transition-colors">Terms</a>
+          <a href="https://app.clawsight.org/privacy.html" class="hover:text-white transition-colors">Privacy</a>
+        </div>
+        <div class="text-[13px] text-gray-700">
+          &copy; 2026 ClawSight. MIT License.
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    const SUPABASE_URL = 'https://kfibmwbwdcejrsuahbps.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_UgtXVptJpAWZMZAOgp1rGA_e2OgLuaC';
+    const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    const APP_ORIGIN = 'https://app.clawsight.org';
+
+    async function handleLogin() {
+      const btn = document.getElementById('login-btn');
+      const email = document.getElementById('email').value.trim();
+      const errorEl = document.getElementById('error-message');
+
+      errorEl.classList.add('hidden');
+
+      if (!email || !email.includes('@')) {
+        errorEl.querySelector('div').textContent = 'Please enter a valid email address.';
+        errorEl.classList.remove('hidden');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Sending...';
+
+      const { error } = await supabaseClient.auth.signInWithOtp({
+        email,
+        options: { emailRedirectTo: APP_ORIGIN + '/dashboard.html' }
+      });
+
+      if (error) {
+        btn.disabled = false;
+        btn.textContent = 'Get started free';
+        errorEl.querySelector('div').textContent = error.message;
+        errorEl.classList.remove('hidden');
+      } else {
+        document.getElementById('login-form').classList.add('hidden');
+        document.getElementById('success-message').classList.remove('hidden');
+      }
+    }
+
+    function resetForm() {
+      document.getElementById('success-message').classList.add('hidden');
+      document.getElementById('login-form').classList.remove('hidden');
+      document.getElementById('login-btn').disabled = false;
+      document.getElementById('login-btn').textContent = 'Get started free';
+      document.getElementById('email').value = '';
+      document.getElementById('email').focus();
+    }
+
+    function copySnippet() {
+      const code = document.getElementById('code-snippet').textContent;
+      navigator.clipboard.writeText(code);
+      const btn = document.getElementById('copy-btn');
+      btn.textContent = 'copied!';
+      setTimeout(() => btn.textContent = 'copy', 2000);
+    }
+
+    // Smooth scroll for anchor links
+    document.querySelectorAll('a[href^="#"]').forEach(a => {
+      a.addEventListener('click', e => {
+        e.preventDefault();
+        const target = document.querySelector(a.getAttribute('href'));
+        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    });
+
+    // Handle magic link tokens if user lands here with #access_token
+    // (Supabase may redirect here instead of the app)
+    (async () => {
+      if (window.location.hash.includes('access_token=')) {
+        const params = new URLSearchParams(window.location.hash.substring(1));
+        const access_token = params.get('access_token');
+        const refresh_token = params.get('refresh_token');
+        if (access_token && refresh_token) {
+          // Redirect to the app with the tokens so the session is established there
+          window.location.replace(APP_ORIGIN + '/dashboard.html#access_token=' + access_token + '&refresh_token=' + refresh_token + '&token_type=bearer');
+          return;
+        }
+      }
+    })();
+  </script>
+
+  <script defer src="https://counter.dev/script.js" data-id="clawsight-org" data-utcoffset="0"></script>
+</body>
+</html>
