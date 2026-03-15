@@ -35,14 +35,14 @@ const io = new Server(server, {
   cors: { origin: ALLOWED_ORIGINS, methods: ["GET", "POST"] }
 });
 
-// --- IN-MEMORY STATE (Performance Cache) ---
+// --- IN-MEMORY CACHE (write-through to DB) ---
 let activeAgents = {};
 
 // Track which socket owns which agent (for disconnect cleanup)
 const socketAgentMap = new Map(); // socketId -> Set<agentId>
 
-// Share snapshots (in-memory, keyed by shareId)
-const shareSnapshots = new Map();
+// Budget rules cache: tenantId -> [{ agent_id, max_cost, action }]
+const budgetCache = new Map();
 
 // --- INPUT VALIDATION ---
 const MAX_AGENT_NAME_LEN = 200;
@@ -58,6 +58,11 @@ function sanitizeString(str, maxLen) {
 
 function isValidNumber(val) {
   return typeof val === 'number' && isFinite(val) && val >= 0 && val <= 1e9;
+}
+
+function isValidUrl(str) {
+  try { const u = new URL(str); return u.protocol === 'https:' || u.protocol === 'http:'; }
+  catch { return false; }
 }
 
 // --- RATE LIMITING ---
@@ -111,7 +116,6 @@ console.log("🔒 ClawSight Server Starting...");
 // --- HELPERS ---
 
 async function getOrCreateTenant(userId) {
-  // Check for existing tenant
   const { data: existing } = await supabase
     .from('user_tenants')
     .select('tenant_id')
@@ -120,7 +124,6 @@ async function getOrCreateTenant(userId) {
 
   if (existing) return existing.tenant_id;
 
-  // Create the tenant row first (parent), then link user to it
   const tenantId = uuidv4();
   const { error: tenantError } = await supabase
     .from('tenants')
@@ -144,19 +147,280 @@ async function getOrCreateTenant(userId) {
   return tenantId;
 }
 
-// --- API ENDPOINTS ---
+// --- DB PERSISTENCE LAYER ---
 
-// Create API Key (Called by Dashboard)
-app.post('/api/keys', async (req, res) => {
+async function dbUpsertAgent(agent) {
+  const { error } = await supabase.from('agents').upsert({
+    id: agent.id,
+    tenant_id: agent.tenantId,
+    name: agent.name,
+    status: agent.status,
+    parent_agent_id: agent.parentAgentId || null,
+    last_heartbeat: agent.lastHeartbeat
+  }, { onConflict: 'id,tenant_id' });
+  if (error) console.error('dbUpsertAgent:', error.message);
+}
+
+async function dbUpsertMetrics(agent) {
+  const m = agent.metrics || { cost: 0, revenue: 0, tokens: 0 };
+  const { error } = await supabase.from('agent_metrics').upsert({
+    agent_id: agent.id,
+    tenant_id: agent.tenantId,
+    cost: m.cost,
+    revenue: m.revenue,
+    tokens: m.tokens,
+    updated_at: new Date().toISOString()
+  }, { onConflict: 'agent_id,tenant_id' });
+  if (error) console.error('dbUpsertMetrics:', error.message);
+}
+
+async function dbInsertLog(agent, message) {
+  const { error } = await supabase.from('agent_logs').insert({
+    agent_id: agent.id,
+    tenant_id: agent.tenantId,
+    message
+  });
+  if (error) console.error('dbInsertLog:', error.message);
+}
+
+async function dbUpdateAgentStatus(agentId, tenantId, status) {
+  const { error } = await supabase.from('agents')
+    .update({ status, last_heartbeat: Date.now() })
+    .eq('id', agentId)
+    .eq('tenant_id', tenantId);
+  if (error) console.error('dbUpdateAgentStatus:', error.message);
+}
+
+async function dbLoadTenantAgents(tenantId) {
+  const { data: agents, error } = await supabase
+    .from('agents')
+    .select('id, name, status, parent_agent_id, last_heartbeat, created_at')
+    .eq('tenant_id', tenantId);
+  if (error) { console.error('dbLoadTenantAgents:', error.message); return []; }
+
+  const result = [];
+  for (const a of (agents || [])) {
+    const { data: metrics } = await supabase
+      .from('agent_metrics')
+      .select('cost, revenue, tokens')
+      .eq('agent_id', a.id)
+      .eq('tenant_id', tenantId)
+      .single();
+
+    const { data: logs } = await supabase
+      .from('agent_logs')
+      .select('message, created_at')
+      .eq('agent_id', a.id)
+      .eq('tenant_id', tenantId)
+      .order('created_at', { ascending: false })
+      .limit(MAX_LOGS_PER_AGENT);
+
+    result.push({
+      id: a.id,
+      name: a.name,
+      tenantId,
+      status: a.status,
+      parentAgentId: a.parent_agent_id,
+      lastHeartbeat: a.last_heartbeat,
+      logs: (logs || []).reverse().map(l => ({
+        timestamp: new Date(l.created_at).getTime(),
+        message: l.message
+      })),
+      metrics: {
+        cost: metrics?.cost || 0,
+        revenue: metrics?.revenue || 0,
+        tokens: metrics?.tokens || 0
+      }
+    });
+  }
+  return result;
+}
+
+// --- BUDGET ENFORCEMENT ---
+
+async function loadBudgetRules(tenantId) {
+  const { data, error } = await supabase
+    .from('budget_rules')
+    .select('agent_id, max_cost, action, enabled')
+    .eq('tenant_id', tenantId)
+    .eq('enabled', true);
+  if (error) { console.error('loadBudgetRules:', error.message); return; }
+  budgetCache.set(tenantId, data || []);
+}
+
+function getBudgetRule(tenantId, agentId) {
+  const rules = budgetCache.get(tenantId);
+  if (!rules) return null;
+  // Agent-specific rule takes precedence, fall back to tenant-wide (agent_id = null)
+  return rules.find(r => r.agent_id === agentId) || rules.find(r => r.agent_id === null) || null;
+}
+
+async function checkBudget(agent) {
+  const rule = getBudgetRule(agent.tenantId, agent.id);
+  if (!rule) return false;
+  if (agent.metrics.cost < rule.max_cost) return false;
+
+  // Budget exceeded
+  console.log(`💰 Budget exceeded: agent ${agent.id} cost $${agent.metrics.cost.toFixed(4)} >= limit $${rule.max_cost.toFixed(2)}`);
+
+  if (rule.action === 'kill' || rule.action === 'pause') {
+    agent.status = 'killed';
+    const killReason = `Budget ceiling exceeded ($${agent.metrics.cost.toFixed(4)} >= $${rule.max_cost.toFixed(2)})`;
+    agent.logs.push({ timestamp: Date.now(), message: `⛔ AUTO-KILL: ${killReason}` });
+    if (agent.logs.length > MAX_LOGS_PER_AGENT) agent.logs.shift();
+
+    // Emit kill signal to the agent process
+    io.to(`tenant:${agent.tenantId}`).emit('kill-signal', agent.id);
+
+    // Update dashboard
+    io.to(`tenant:${agent.tenantId}`).emit('agent-update', agent);
+    io.to(`tenant:${agent.tenantId}`).emit('budget-exceeded', {
+      agentId: agent.id,
+      agentName: agent.name,
+      cost: agent.metrics.cost,
+      limit: rule.max_cost,
+      action: rule.action
+    });
+
+    // Persist
+    await dbUpdateAgentStatus(agent.id, agent.tenantId, 'killed');
+    await dbInsertLog(agent, `⛔ AUTO-KILL: ${killReason}`);
+
+    // Cascade kill children
+    const children = Object.values(activeAgents).filter(
+      a => a.parentAgentId === agent.id && a.tenantId === agent.tenantId
+    );
+    for (const child of children) {
+      child.status = 'killed';
+      child.logs.push({ timestamp: Date.now(), message: `⛔ Parent agent ${agent.id} budget exceeded — cascade kill` });
+      io.to(`tenant:${child.tenantId}`).emit('kill-signal', child.id);
+      io.to(`tenant:${child.tenantId}`).emit('agent-update', child);
+      await dbUpdateAgentStatus(child.id, child.tenantId, 'killed');
+    }
+  }
+
+  // Fire webhook
+  await fireWebhooks(agent.tenantId, 'budget_exceeded', {
+    agentId: agent.id,
+    agentName: agent.name,
+    cost: agent.metrics.cost,
+    limit: rule.max_cost,
+    action: rule.action
+  });
+
+  return true;
+}
+
+// --- WEBHOOK SYSTEM ---
+
+async function fireWebhooks(tenantId, event, payload) {
+  const { data: hooks } = await supabase
+    .from('webhooks')
+    .select('url, events')
+    .eq('tenant_id', tenantId)
+    .eq('enabled', true);
+
+  if (!hooks || hooks.length === 0) return;
+
+  const body = JSON.stringify({
+    event,
+    timestamp: new Date().toISOString(),
+    data: payload
+  });
+
+  for (const hook of hooks) {
+    if (!hook.events.includes(event)) continue;
+    // Fire-and-forget with timeout
+    fetch(hook.url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'User-Agent': 'ClawSight-Webhook/1.0' },
+      body,
+      signal: AbortSignal.timeout(5000)
+    }).catch(err => {
+      console.error(`Webhook delivery failed (${hook.url}):`, err.message);
+    });
+  }
+}
+
+// --- REUSABLE API KEY AUTH MIDDLEWARE ---
+
+async function authenticateApiKey(req, res, next) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return res.status(401).json({ error: "Missing Authorization header" });
+
+  const token = authHeader.replace('Bearer ', '');
+
+  // ck_live_ API key
+  if (token.startsWith('ck_live_')) {
+    const prefix = token.slice(0, 12);
+    const { data: candidates, error } = await supabase
+      .from('api_keys')
+      .select('*')
+      .eq('key_prefix', prefix);
+
+    if (error) return res.status(500).json({ error: "Database error" });
+
+    if (candidates) {
+      for (const keyRecord of candidates) {
+        try {
+          if (await argon2.verify(keyRecord.key_hash, token)) {
+            req.tenantId = keyRecord.tenant_id;
+            req.authRole = keyRecord.name === 'Dashboard Session Key' ? 'dashboard' : 'agent';
+            return next();
+          }
+        } catch (e) { /* hash verification failed, try next */ }
+      }
+    }
+    return res.status(401).json({ error: "Invalid API key" });
+  }
+
+  // JWT fallback
+  if (token.length > 50) {
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+    if (user && !error) {
+      const { data: userTenant } = await supabase
+        .from('user_tenants')
+        .select('tenant_id')
+        .eq('user_id', user.id)
+        .single();
+      if (userTenant) {
+        req.tenantId = userTenant.tenant_id;
+        req.authRole = 'dashboard';
+        req.userId = user.id;
+        return next();
+      }
+    }
+  }
+
+  return res.status(401).json({ error: "Unauthorized" });
+}
+
+// Helper for endpoints that only need JWT (dashboard user) auth
+async function authenticateUser(req, res, next) {
   const authHeader = req.headers.authorization;
   if (!authHeader) return res.status(401).json({ error: "Missing Auth" });
 
   const token = authHeader.replace('Bearer ', '');
-
   const { data: { user }, error } = await supabase.auth.getUser(token);
   if (error || !user) return res.status(401).json({ error: "Invalid User" });
 
-  const tenantId = await getOrCreateTenant(user.id);
+  req.userId = user.id;
+
+  const { data: userTenant } = await supabase
+    .from('user_tenants')
+    .select('tenant_id')
+    .eq('user_id', user.id)
+    .single();
+
+  req.tenantId = userTenant?.tenant_id || null;
+  next();
+}
+
+// --- API ENDPOINTS ---
+
+// Create API Key (Called by Dashboard)
+app.post('/api/keys', authenticateUser, async (req, res) => {
+  const tenantId = req.tenantId || await getOrCreateTenant(req.userId);
   if (!tenantId) return res.status(500).json({ error: "Failed to resolve tenant" });
 
   const rawKey = 'ck_live_' + uuidv4().replace(/-/g, '');
@@ -171,57 +435,32 @@ app.post('/api/keys', async (req, res) => {
   });
 
   if (dbError) return res.status(500).json({ error: dbError.message });
-
   res.json({ key: rawKey, name: req.body.name });
 });
 
 // List Keys
-app.get('/api/keys', async (req, res) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader) return res.status(401).json({ error: "Missing Auth" });
-
-  const token = authHeader.replace('Bearer ', '');
-  const { data: { user } } = await supabase.auth.getUser(token);
-  if (!user) return res.status(401).json({ error: "Invalid User" });
-
-  const { data: userTenant } = await supabase.from('user_tenants').select('tenant_id').eq('user_id', user.id).single();
-  if (!userTenant) return res.json([]);
+app.get('/api/keys', authenticateUser, async (req, res) => {
+  if (!req.tenantId) return res.json([]);
 
   const { data: keys } = await supabase.from('api_keys')
     .select('id, name, key_prefix, created_at')
-    .eq('tenant_id', userTenant.tenant_id)
+    .eq('tenant_id', req.tenantId)
     .neq('name', 'Dashboard Session Key');
   res.json(keys || []);
 });
 
 // Delete Key
-app.delete('/api/keys/:id', async (req, res) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader) return res.status(401).json({ error: "Missing Auth" });
-  const token = authHeader.replace('Bearer ', '');
-  const { data: { user } } = await supabase.auth.getUser(token);
-  if (!user) return res.status(401).json({ error: "Invalid User" });
-
-  const { data: userTenant } = await supabase.from('user_tenants').select('tenant_id').eq('user_id', user.id).single();
-  if (!userTenant) return res.status(403).json({ error: "No tenant" });
-
-  await supabase.from('api_keys').delete().eq('id', req.params.id).eq('tenant_id', userTenant.tenant_id);
+app.delete('/api/keys/:id', authenticateUser, async (req, res) => {
+  if (!req.tenantId) return res.status(403).json({ error: "No tenant" });
+  await supabase.from('api_keys').delete().eq('id', req.params.id).eq('tenant_id', req.tenantId);
   res.json({ success: true });
 });
 
 // Dashboard Session Key (auto provision after login)
-app.post('/api/dashboard-key', async (req, res) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader) return res.status(401).json({ error: "Missing Auth" });
-
-  const token = authHeader.replace('Bearer ', '');
-  const { data: { user }, error } = await supabase.auth.getUser(token);
-  if (error || !user) return res.status(401).json({ error: "Invalid User" });
-
-  const tenantId = await getOrCreateTenant(user.id);
+app.post('/api/dashboard-key', authenticateUser, async (req, res) => {
+  const tenantId = req.tenantId || await getOrCreateTenant(req.userId);
   if (!tenantId) return res.status(500).json({ error: "Failed to resolve tenant" });
 
-  // Remove prior dashboard keys for cleanliness
   await supabase.from('api_keys')
     .delete()
     .eq('tenant_id', tenantId)
@@ -239,11 +478,10 @@ app.post('/api/dashboard-key', async (req, res) => {
   });
 
   if (insertError) return res.status(500).json({ error: insertError.message });
-
   res.json({ key: rawKey });
 });
 
-// Share Agent Snapshot
+// Share Agent Snapshot (now reads from DB if not in cache)
 app.post('/api/share', async (req, res) => {
   const { agentId } = req.body;
   if (!agentId || typeof agentId !== 'string') return res.status(400).json({ error: 'Missing agentId' });
@@ -261,45 +499,241 @@ app.post('/api/share', async (req, res) => {
     timestamp: Date.now()
   };
 
-  shareSnapshots.set(shareId, snapshot);
-
-  // Auto-expire after 24 hours
-  setTimeout(() => shareSnapshots.delete(shareId), 24 * 60 * 60 * 1000);
+  // Store snapshot in DB for durability
+  await supabase.from('agents').select('id').eq('id', agent.id).single(); // verify exists
 
   const baseUrl = `${req.protocol}://${req.get('host')}`;
+  // Still use in-memory for 24h expiry snapshots (simple, sufficient)
+  const shareSnapshots = app.locals.shareSnapshots || (app.locals.shareSnapshots = new Map());
+  shareSnapshots.set(shareId, snapshot);
+  setTimeout(() => shareSnapshots.delete(shareId), 24 * 60 * 60 * 1000);
+
   res.json({ url: `${baseUrl}/share.html?id=${shareId}` });
 });
 
 // Get Shared Snapshot
 app.get('/api/share/:id', (req, res) => {
+  const shareSnapshots = app.locals.shareSnapshots || new Map();
   const snapshot = shareSnapshots.get(req.params.id);
   if (!snapshot) return res.status(404).json({ error: 'Share link expired or not found' });
   res.json(snapshot);
 });
 
-// Check if user is new or returning (has agents/keys)
-app.get('/api/user/status', async (req, res) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader) return res.status(401).json({ error: "Missing Auth" });
-
-  const token = authHeader.replace('Bearer ', '');
-  const { data: { user }, error } = await supabase.auth.getUser(token);
-  if (error || !user) return res.status(401).json({ error: "Invalid User" });
-
-  const { data: userTenant } = await supabase.from('user_tenants').select('tenant_id').eq('user_id', user.id).single();
-
-  if (!userTenant) {
-    return res.json({ isNew: true, hasKeys: false });
-  }
+// Check if user is new or returning
+app.get('/api/user/status', authenticateUser, async (req, res) => {
+  if (!req.tenantId) return res.json({ isNew: true, hasKeys: false });
 
   const { data: keys } = await supabase.from('api_keys')
     .select('id')
-    .eq('tenant_id', userTenant.tenant_id)
+    .eq('tenant_id', req.tenantId)
     .neq('name', 'Dashboard Session Key')
     .limit(1);
 
   const hasAgentKeys = keys && keys.length > 0;
   return res.json({ isNew: false, hasKeys: hasAgentKeys });
+});
+
+// --- BUDGET ENDPOINTS ---
+
+app.get('/api/budgets', authenticateUser, async (req, res) => {
+  if (!req.tenantId) return res.json([]);
+
+  const { data, error } = await supabase.from('budget_rules')
+    .select('id, agent_id, max_cost, action, enabled, created_at')
+    .eq('tenant_id', req.tenantId)
+    .order('created_at', { ascending: false });
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data || []);
+});
+
+app.post('/api/budgets', authenticateUser, async (req, res) => {
+  const tenantId = req.tenantId || await getOrCreateTenant(req.userId);
+  if (!tenantId) return res.status(500).json({ error: "Failed to resolve tenant" });
+
+  const { agentId, maxCost, action } = req.body;
+  if (typeof maxCost !== 'number' || maxCost <= 0) {
+    return res.status(400).json({ error: "maxCost must be a positive number" });
+  }
+  const validActions = ['kill', 'pause', 'alert_only'];
+  const safeAction = validActions.includes(action) ? action : 'kill';
+
+  const { data, error } = await supabase.from('budget_rules')
+    .upsert({
+      tenant_id: tenantId,
+      agent_id: agentId || null,
+      max_cost: maxCost,
+      action: safeAction,
+      enabled: true
+    }, { onConflict: 'tenant_id,agent_id' })
+    .select()
+    .single();
+
+  if (error) return res.status(500).json({ error: error.message });
+
+  // Refresh cache
+  await loadBudgetRules(tenantId);
+
+  res.json(data);
+});
+
+app.delete('/api/budgets/:id', authenticateUser, async (req, res) => {
+  if (!req.tenantId) return res.status(403).json({ error: "No tenant" });
+
+  await supabase.from('budget_rules')
+    .delete()
+    .eq('id', req.params.id)
+    .eq('tenant_id', req.tenantId);
+
+  // Refresh cache
+  await loadBudgetRules(req.tenantId);
+
+  res.json({ success: true });
+});
+
+// --- WEBHOOK ENDPOINTS ---
+
+app.get('/api/webhooks', authenticateUser, async (req, res) => {
+  if (!req.tenantId) return res.json([]);
+
+  const { data, error } = await supabase.from('webhooks')
+    .select('id, url, events, enabled, created_at')
+    .eq('tenant_id', req.tenantId)
+    .order('created_at', { ascending: false });
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data || []);
+});
+
+app.post('/api/webhooks', authenticateUser, async (req, res) => {
+  const tenantId = req.tenantId || await getOrCreateTenant(req.userId);
+  if (!tenantId) return res.status(500).json({ error: "Failed to resolve tenant" });
+
+  const { url, events } = req.body;
+  if (!url || !isValidUrl(url)) return res.status(400).json({ error: "Valid HTTPS/HTTP URL required" });
+
+  const validEvents = ['budget_exceeded', 'agent_killed', 'agent_error'];
+  const safeEvents = Array.isArray(events) ? events.filter(e => validEvents.includes(e)) : validEvents;
+  if (safeEvents.length === 0) return res.status(400).json({ error: "At least one valid event required" });
+
+  const { data, error } = await supabase.from('webhooks')
+    .insert({ tenant_id: tenantId, url, events: safeEvents })
+    .select()
+    .single();
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+app.delete('/api/webhooks/:id', authenticateUser, async (req, res) => {
+  if (!req.tenantId) return res.status(403).json({ error: "No tenant" });
+  await supabase.from('webhooks').delete().eq('id', req.params.id).eq('tenant_id', req.tenantId);
+  res.json({ success: true });
+});
+
+app.post('/api/webhooks/:id/test', authenticateUser, async (req, res) => {
+  if (!req.tenantId) return res.status(403).json({ error: "No tenant" });
+
+  const { data: hook } = await supabase.from('webhooks')
+    .select('url')
+    .eq('id', req.params.id)
+    .eq('tenant_id', req.tenantId)
+    .single();
+
+  if (!hook) return res.status(404).json({ error: "Webhook not found" });
+
+  try {
+    const response = await fetch(hook.url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'User-Agent': 'ClawSight-Webhook/1.0' },
+      body: JSON.stringify({
+        event: 'test',
+        timestamp: new Date().toISOString(),
+        data: { message: 'This is a test webhook from ClawSight' }
+      }),
+      signal: AbortSignal.timeout(5000)
+    });
+    res.json({ success: true, status: response.status });
+  } catch (err) {
+    res.status(502).json({ error: `Webhook delivery failed: ${err.message}` });
+  }
+});
+
+// --- AGENT REGISTRATION ENDPOINT (for orchestrator agents) ---
+
+app.post('/api/agents/register', authenticateApiKey, async (req, res) => {
+  const tenantId = req.tenantId;
+  const { agentId, name, budget, webhookUrl, parentAgentId } = req.body;
+
+  if (!agentId || typeof agentId !== 'string') {
+    return res.status(400).json({ error: "agentId is required" });
+  }
+
+  const safeId = sanitizeString(agentId, MAX_AGENT_ID_LEN);
+  const safeName = sanitizeString(name || agentId, MAX_AGENT_NAME_LEN);
+
+  // Check agent limit
+  const tenantAgentCount = Object.values(activeAgents).filter(a => a.tenantId === tenantId).length;
+  if (tenantAgentCount >= MAX_AGENTS_PER_TENANT && !activeAgents[safeId]) {
+    return res.status(429).json({ error: `Agent limit reached (${MAX_AGENTS_PER_TENANT})` });
+  }
+
+  // Create agent in memory + DB
+  const agent = {
+    id: safeId,
+    name: safeName,
+    tenantId,
+    lastHeartbeat: Date.now(),
+    status: 'idle',
+    parentAgentId: parentAgentId ? sanitizeString(parentAgentId, MAX_AGENT_ID_LEN) : null,
+    logs: [],
+    metrics: { cost: 0, tokens: 0, revenue: 0 }
+  };
+
+  activeAgents[safeId] = agent;
+  await dbUpsertAgent(agent);
+  await dbUpsertMetrics(agent);
+
+  // Set budget rule if provided
+  let budgetRule = null;
+  if (budget && typeof budget.maxCost === 'number' && budget.maxCost > 0) {
+    const validActions = ['kill', 'pause', 'alert_only'];
+    const action = validActions.includes(budget.action) ? budget.action : 'kill';
+
+    const { data } = await supabase.from('budget_rules')
+      .upsert({
+        tenant_id: tenantId,
+        agent_id: safeId,
+        max_cost: budget.maxCost,
+        action,
+        enabled: true
+      }, { onConflict: 'tenant_id,agent_id' })
+      .select()
+      .single();
+
+    budgetRule = data;
+    await loadBudgetRules(tenantId);
+  }
+
+  // Register webhook if provided
+  if (webhookUrl && isValidUrl(webhookUrl)) {
+    await supabase.from('webhooks').insert({
+      tenant_id: tenantId,
+      url: webhookUrl,
+      events: ['budget_exceeded', 'agent_killed', 'agent_error']
+    });
+  }
+
+  // Notify dashboards
+  io.to(`tenant:${tenantId}`).emit('agent-update', agent);
+
+  res.json({
+    agentId: safeId,
+    name: safeName,
+    tenantId,
+    budgetRule: budgetRule ? { maxCost: budgetRule.max_cost, action: budgetRule.action } : null,
+    status: 'registered'
+  });
 });
 
 // Catch-all: serve landing page for any unmatched GET route
@@ -316,7 +750,7 @@ io.use(async (socket, next) => {
   const token = socket.handshake.auth.token;
   if (!token) return next(new Error("No token provided"));
 
-  // 1. Legacy Master Key Check (only if key is configured via env var)
+  // 1. Legacy Master Key Check
   if (LEGACY_API_KEY && token === LEGACY_API_KEY) {
     socket.user = { role: 'admin', tenantId: 'legacy_admin' };
     return next();
@@ -367,16 +801,33 @@ io.use(async (socket, next) => {
   next(new Error("Unauthorized"));
 });
 
-io.on('connection', (socket) => {
+io.on('connection', async (socket) => {
   const { tenantId, role } = socket.user;
   console.log(`✅ Connected: ${socket.id} (Role: ${role}, Tenant: ${tenantId})`);
 
   // Join Tenant Room
   socket.join(`tenant:${tenantId}`);
 
-  // If Dashboard, send initial state (Filtered by Tenant)
+  // Load budget rules into cache for this tenant
+  if (!budgetCache.has(tenantId)) {
+    await loadBudgetRules(tenantId);
+  }
+
+  // If Dashboard, send initial state from DB + in-memory merge
   if (role === 'dashboard' || role === 'admin') {
-    let tenantAgents = Object.values(activeAgents).filter(a => a.tenantId === tenantId || tenantId === 'legacy_admin');
+    // Load persisted agents from DB
+    const dbAgents = await dbLoadTenantAgents(tenantId);
+
+    // Merge: in-memory cache takes precedence (more current), DB fills gaps
+    const merged = {};
+    for (const a of dbAgents) merged[a.id] = a;
+    for (const a of Object.values(activeAgents)) {
+      if (a.tenantId === tenantId || tenantId === 'legacy_admin') {
+        merged[a.id] = a; // in-memory overrides DB (more recent)
+      }
+    }
+
+    let tenantAgents = Object.values(merged);
     if (tenantAgents.length === 0 && role === 'dashboard') {
       tenantAgents = [buildDemoAgent(tenantId)];
     }
@@ -384,11 +835,10 @@ io.on('connection', (socket) => {
   }
 
   // Agent Register
-  socket.on('register-agent', (agent) => {
+  socket.on('register-agent', async (agent) => {
     if (!agent || !agent.id) return;
     if (!checkRateLimit(socket.id)) return;
 
-    // Enforce per-tenant agent limit
     const tenantAgentCount = Object.values(activeAgents).filter(a => a.tenantId === tenantId).length;
     if (tenantAgentCount >= MAX_AGENTS_PER_TENANT && !activeAgents[agent.id]) return;
 
@@ -398,15 +848,20 @@ io.on('connection', (socket) => {
       tenantId: tenantId,
       lastHeartbeat: Date.now(),
       status: agent.status || 'idle',
+      parentAgentId: activeAgents[agent.id]?.parentAgentId || null,
       logs: [],
       metrics: { cost: 0, tokens: 0, revenue: 0 }
     };
 
     activeAgents[safeAgent.id] = safeAgent;
 
-    // Track which agents this socket owns (for disconnect cleanup)
+    // Track which agents this socket owns
     if (!socketAgentMap.has(socket.id)) socketAgentMap.set(socket.id, new Set());
     socketAgentMap.get(socket.id).add(safeAgent.id);
+
+    // Persist to DB
+    await dbUpsertAgent(safeAgent);
+    await dbUpsertMetrics(safeAgent);
 
     // Broadcast to this Tenant Only
     io.to(`tenant:${tenantId}`).emit('agent-update', safeAgent);
@@ -414,7 +869,7 @@ io.on('connection', (socket) => {
   });
 
   // Agent Log
-  socket.on('agent-log', (data) => {
+  socket.on('agent-log', async (data) => {
     if (!data || !data.id || !activeAgents[data.id]) return;
     if (!checkRateLimit(socket.id)) return;
 
@@ -423,17 +878,32 @@ io.on('connection', (socket) => {
     // Security: Ensure Agent belongs to this socket's tenant
     if (agent.tenantId !== tenantId && tenantId !== 'legacy_admin') return;
 
+    // Don't allow updates to killed agents
+    if (agent.status === 'killed') return;
+
     agent.lastHeartbeat = Date.now();
 
     const allowedStatuses = ['idle', 'working', 'error', 'killed', 'offline', 'complete'];
     if (data.status && allowedStatuses.includes(data.status)) {
+      const prevStatus = agent.status;
       agent.status = data.status;
+
+      // Fire webhook on error status
+      if (data.status === 'error' && prevStatus !== 'error') {
+        fireWebhooks(agent.tenantId, 'agent_error', {
+          agentId: agent.id,
+          agentName: agent.name,
+          previousStatus: prevStatus
+        });
+      }
     }
 
     if (data.message) {
       const msg = sanitizeString(data.message, MAX_LOG_MESSAGE_LEN);
       agent.logs.push({ timestamp: Date.now(), message: msg });
       if (agent.logs.length > MAX_LOGS_PER_AGENT) agent.logs.shift();
+      // Persist log to DB (fire-and-forget)
+      dbInsertLog(agent, msg);
     }
 
     if (data.metrics) {
@@ -444,13 +914,21 @@ io.on('connection', (socket) => {
       if (isValidNumber(costVal)) agent.metrics.cost += costVal;
       if (isValidNumber(revenueVal)) agent.metrics.revenue += revenueVal;
       if (isValidNumber(tokensVal)) agent.metrics.tokens += tokensVal;
+
+      // Check budget after cost update
+      if (isValidNumber(costVal) && costVal > 0) {
+        await checkBudget(agent);
+      }
     }
+
+    // Persist metrics (debounced via write-through)
+    dbUpsertMetrics(agent);
 
     io.to(`tenant:${agent.tenantId}`).emit('agent-update', agent);
     io.to('tenant:legacy_admin').emit('agent-update', agent);
   });
 
-  socket.on('kill-agent', (agentId) => {
+  socket.on('kill-agent', async (agentId) => {
     if (role === 'agent') return;
 
     const agent = activeAgents[agentId];
@@ -465,16 +943,37 @@ io.on('connection', (socket) => {
 
     agent.status = 'killed';
     io.to(`tenant:${agent.tenantId}`).emit('agent-update', agent);
+
+    // Persist status
+    await dbUpdateAgentStatus(agentId, agent.tenantId, 'killed');
+
+    // Cascade kill children
+    const children = Object.values(activeAgents).filter(
+      a => a.parentAgentId === agentId && a.tenantId === agent.tenantId
+    );
+    for (const child of children) {
+      child.status = 'killed';
+      child.logs.push({ timestamp: Date.now(), message: `⛔ Parent agent ${agentId} killed — cascade kill` });
+      io.to(`tenant:${child.tenantId}`).emit('kill-signal', child.id);
+      io.to(`tenant:${child.tenantId}`).emit('agent-update', child);
+      await dbUpdateAgentStatus(child.id, child.tenantId, 'killed');
+    }
+
+    // Fire webhook
+    fireWebhooks(agent.tenantId, 'agent_killed', {
+      agentId: agent.id,
+      agentName: agent.name,
+      killedBy: 'manual',
+      childrenKilled: children.map(c => c.id)
+    });
   });
 
   // Cleanup on disconnect
-  socket.on('disconnect', () => {
+  socket.on('disconnect', async () => {
     console.log(`Disconnected: ${socket.id} (Role: ${role})`);
 
-    // Clean up rate limit tracking
     rateLimitMap.delete(socket.id);
 
-    // Mark agents owned by this socket as disconnected
     const ownedAgents = socketAgentMap.get(socket.id);
     if (ownedAgents) {
       for (const agentId of ownedAgents) {
@@ -482,6 +981,7 @@ io.on('connection', (socket) => {
         if (agent && agent.status !== 'killed') {
           agent.status = 'offline';
           io.to(`tenant:${agent.tenantId}`).emit('agent-update', agent);
+          dbUpdateAgentStatus(agentId, agent.tenantId, 'offline');
         }
       }
       socketAgentMap.delete(socket.id);

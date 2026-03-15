@@ -36,6 +36,7 @@
       <button onclick="showTab('dashboard')" id="tab-dashboard" class="px-2 sm:px-3 py-1.5 rounded bg-gray-800 text-emerald-400 font-bold">DASHBOARD</button>
       <button onclick="showTab('setup')" id="tab-setup" class="px-2 sm:px-3 py-1.5 rounded text-gray-500 hover:text-white hover:bg-gray-800 transition">SETUP</button>
       <button onclick="showTab('keys')" id="tab-keys" class="px-2 sm:px-3 py-1.5 rounded text-gray-500 hover:text-white hover:bg-gray-800 transition">API KEYS</button>
+      <button onclick="showTab('settings')" id="tab-settings" class="px-2 sm:px-3 py-1.5 rounded text-gray-500 hover:text-white hover:bg-gray-800 transition">SETTINGS</button>
       <button onclick="logout()" class="px-2 sm:px-3 py-1.5 rounded text-gray-600 hover:text-red-400 hover:bg-gray-800 transition sm:ml-2">LOGOUT</button>
     </nav>
   </header>
@@ -164,6 +165,69 @@ watcher.<span class="text-yellow-300">metric</span>(<span class="text-amber-400"
 
         <div id="keys-empty" class="hidden p-8 text-center text-gray-700 text-sm">No API keys yet. Create one to connect agents.</div>
       </div>
+    </div>
+
+    <!-- SETTINGS TAB (Budgets & Webhooks) -->
+    <div id="view-settings" class="hidden max-w-3xl mx-auto space-y-6">
+
+      <!-- Budget Rules -->
+      <div class="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
+        <div class="p-4 sm:p-6 border-b border-gray-800">
+          <h2 class="text-lg font-bold text-white mb-1">Budget Guard</h2>
+          <p class="text-xs text-gray-500">Set cost ceilings. Agents that exceed their budget are auto-killed.</p>
+        </div>
+
+        <div class="p-4 sm:p-6 border-b border-gray-800 bg-gray-950">
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label class="text-[10px] text-gray-500 uppercase tracking-wider font-bold block mb-1">Agent ID (blank = all agents)</label>
+              <input id="budget-agent-id" type="text" placeholder="e.g. trading-bot-1" class="w-full bg-gray-900 border border-gray-800 rounded px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none text-white" />
+            </div>
+            <div>
+              <label class="text-[10px] text-gray-500 uppercase tracking-wider font-bold block mb-1">Max Cost ($)</label>
+              <input id="budget-max-cost" type="number" step="0.01" min="0.01" placeholder="5.00" class="w-full bg-gray-900 border border-gray-800 rounded px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none text-white" />
+            </div>
+            <div class="flex items-end">
+              <button onclick="createBudgetRule()" class="w-full text-xs bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded font-bold transition">Set Budget</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="budget-list" class="divide-y divide-gray-800"></div>
+        <div id="budget-empty" class="hidden p-8 text-center text-gray-700 text-sm">No budget rules set. Create one above.</div>
+      </div>
+
+      <!-- Webhooks -->
+      <div class="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
+        <div class="p-4 sm:p-6 border-b border-gray-800">
+          <h2 class="text-lg font-bold text-white mb-1">Webhooks</h2>
+          <p class="text-xs text-gray-500">Get notified via HTTP POST when agents are killed, exceed budgets, or error.</p>
+        </div>
+
+        <div class="p-4 sm:p-6 border-b border-gray-800 bg-gray-950">
+          <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
+            <div class="sm:col-span-2">
+              <label class="text-[10px] text-gray-500 uppercase tracking-wider font-bold block mb-1">Webhook URL</label>
+              <input id="webhook-url" type="url" placeholder="https://your-server.com/webhook" class="w-full bg-gray-900 border border-gray-800 rounded px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none text-white" />
+            </div>
+            <div>
+              <label class="text-[10px] text-gray-500 uppercase tracking-wider font-bold block mb-1">Events</label>
+              <div class="flex gap-2 flex-wrap pt-1">
+                <label class="text-[10px] text-gray-400 flex items-center gap-1"><input type="checkbox" class="webhook-event" value="budget_exceeded" checked> budget</label>
+                <label class="text-[10px] text-gray-400 flex items-center gap-1"><input type="checkbox" class="webhook-event" value="agent_killed" checked> killed</label>
+                <label class="text-[10px] text-gray-400 flex items-center gap-1"><input type="checkbox" class="webhook-event" value="agent_error" checked> error</label>
+              </div>
+            </div>
+            <div class="flex items-end">
+              <button onclick="createWebhook()" class="w-full text-xs bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded font-bold transition">Add Webhook</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="webhook-list" class="divide-y divide-gray-800"></div>
+        <div id="webhook-empty" class="hidden p-8 text-center text-gray-700 text-sm">No webhooks configured. Add one above.</div>
+      </div>
+
     </div>
 
   </main>
@@ -344,8 +408,31 @@ watcher.<span class="text-yellow-300">metric</span>(<span class="text-amber-400"
         socket.on('init', (data) => {
           agents = {};
           (Array.isArray(data) ? data : Object.values(data)).forEach(a => { agents[a.id] = a; });
+          // Load budget rules to overlay on agent cards
+          loadBudgetRulesForCards();
           renderAllAgents();
         });
+
+        socket.on('budget-exceeded', (data) => {
+          toast(`⛔ Budget exceeded: ${data.agentName || data.agentId} ($${data.cost.toFixed(2)} >= $${data.limit.toFixed(2)}) — auto-killed`, 'error');
+        });
+      }
+
+      // Load budget rules and attach limits to agents for card rendering
+      async function loadBudgetRulesForCards() {
+        const token = await getToken();
+        if (!token) return;
+        try {
+          const res = await fetch('/api/budgets', { headers: { Authorization: `Bearer ${token}` } });
+          if (!res.ok) return;
+          const rules = await res.json();
+          const tenantDefault = rules.find(r => !r.agent_id);
+          for (const agent of Object.values(agents)) {
+            const specific = rules.find(r => r.agent_id === agent.id);
+            if (specific) agent.budgetLimit = specific.max_cost;
+            else if (tenantDefault) agent.budgetLimit = tenantDefault.max_cost;
+          }
+        } catch (e) { /* non-critical */ }
       }
 
       // --- TOAST NOTIFICATIONS ---
@@ -476,6 +563,16 @@ watcher.<span class="text-yellow-300">metric</span>(<span class="text-amber-400"
               <div class="border-l border-gray-900"><div class="text-[9px] text-gray-600 uppercase">Revenue</div><div class="text-xs font-mono text-emerald-400">$${revenue.toFixed(2)}</div></div>
               <div class="border-l border-gray-900"><div class="text-[9px] text-gray-600 uppercase">Profit</div><div class="text-xs font-bold font-mono ${profitColor}">${profitSign}$${profit.toFixed(2)}</div></div>
             </div>
+            ${agent.budgetLimit ? `
+            <div class="bg-gray-950 border-b border-gray-800 px-3 py-1.5">
+              <div class="flex justify-between items-center mb-1">
+                <span class="text-[9px] text-gray-600 uppercase">Budget</span>
+                <span class="text-[9px] font-mono ${cost >= agent.budgetLimit ? 'text-red-400' : 'text-gray-500'}">$${cost.toFixed(2)} / $${agent.budgetLimit.toFixed(2)}</span>
+              </div>
+              <div class="w-full bg-gray-800 rounded-full h-1">
+                <div class="h-1 rounded-full transition-all ${cost >= agent.budgetLimit ? 'bg-red-500' : cost >= agent.budgetLimit * 0.8 ? 'bg-yellow-500' : 'bg-emerald-500'}" style="width: ${Math.min(100, (cost / agent.budgetLimit) * 100)}%"></div>
+              </div>
+            </div>` : ''}
 
             <div class="flex-1 bg-gray-950 p-3 overflow-y-auto">
               ${logsHtml || '<div class="text-gray-700 text-[11px] italic">Waiting for logs...</div>'}
@@ -527,10 +624,10 @@ watcher.<span class="text-yellow-300">metric</span>(<span class="text-amber-400"
 
       // --- TABS ---
       window.showTab = (tabName) => {
-        ['dashboard', 'setup', 'keys'].forEach(t => {
+        ['dashboard', 'setup', 'keys', 'settings'].forEach(t => {
           document.getElementById(`view-${t}`).classList.add('hidden');
           const btn = document.getElementById(`tab-${t}`);
-          btn.className = 'px-3 py-1.5 rounded text-gray-500 hover:text-white hover:bg-gray-800 transition';
+          if (btn) btn.className = 'px-3 py-1.5 rounded text-gray-500 hover:text-white hover:bg-gray-800 transition';
         });
         document.getElementById(`view-${tabName}`).classList.remove('hidden');
         const activeBtn = document.getElementById(`tab-${tabName}`);
@@ -538,6 +635,7 @@ watcher.<span class="text-yellow-300">metric</span>(<span class="text-amber-400"
 
         if (tabName === 'keys') loadKeys();
         if (tabName === 'setup') setApiKeyDisplay();
+        if (tabName === 'settings') { loadBudgets(); loadWebhooks(); }
       };
 
       // --- API KEYS TAB ---
@@ -724,6 +822,151 @@ watcher.<span class="text-yellow-300">metric</span>(<span class="text-amber-400"
         localStorage.removeItem('clawsight_api_key');
         await supabaseClient.auth.signOut();
         window.location.replace('/');
+      };
+
+      // --- BUDGET MANAGEMENT ---
+      async function loadBudgets() {
+        const token = await getToken();
+        if (!token) return;
+
+        const res = await fetch('/api/budgets', { headers: { Authorization: `Bearer ${token}` } });
+        const rules = await res.json();
+
+        const list = document.getElementById('budget-list');
+        const empty = document.getElementById('budget-empty');
+
+        if (!rules.length) {
+          list.innerHTML = '';
+          empty.classList.remove('hidden');
+          return;
+        }
+
+        empty.classList.add('hidden');
+        list.innerHTML = rules.map(r => `
+          <div class="flex justify-between items-center px-4 sm:px-6 py-3 text-sm">
+            <div>
+              <span class="text-white font-bold">${r.agent_id ? esc(r.agent_id) : 'All Agents (default)'}</span>
+              <span class="text-gray-600 ml-2">max $${r.max_cost.toFixed(2)}</span>
+              <span class="text-gray-700 ml-2 text-xs">${r.action}</span>
+            </div>
+            <button onclick="deleteBudget('${r.id}')" class="text-gray-600 hover:text-red-400 text-xs transition">remove</button>
+          </div>
+        `).join('');
+      }
+
+      window.createBudgetRule = async () => {
+        const agentId = document.getElementById('budget-agent-id').value.trim();
+        const maxCost = parseFloat(document.getElementById('budget-max-cost').value);
+
+        if (!maxCost || maxCost <= 0) {
+          toast('Enter a valid max cost', 'error');
+          return;
+        }
+
+        const token = await getToken();
+        if (!token) return;
+
+        const res = await fetch('/api/budgets', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ agentId: agentId || null, maxCost, action: 'kill' })
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          toast('Failed: ' + (err.error || res.statusText), 'error');
+          return;
+        }
+
+        toast(agentId ? `Budget set for ${agentId}: $${maxCost.toFixed(2)}` : `Default budget set: $${maxCost.toFixed(2)}`, 'success');
+        document.getElementById('budget-agent-id').value = '';
+        document.getElementById('budget-max-cost').value = '';
+        loadBudgets();
+        loadBudgetRulesForCards();
+      };
+
+      window.deleteBudget = async (id) => {
+        const token = await getToken();
+        if (!token) return;
+        await fetch(`/api/budgets/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+        toast('Budget rule removed', 'info');
+        loadBudgets();
+        loadBudgetRulesForCards();
+      };
+
+      // --- WEBHOOK MANAGEMENT ---
+      async function loadWebhooks() {
+        const token = await getToken();
+        if (!token) return;
+
+        const res = await fetch('/api/webhooks', { headers: { Authorization: `Bearer ${token}` } });
+        const hooks = await res.json();
+
+        const list = document.getElementById('webhook-list');
+        const empty = document.getElementById('webhook-empty');
+
+        if (!hooks.length) {
+          list.innerHTML = '';
+          empty.classList.remove('hidden');
+          return;
+        }
+
+        empty.classList.add('hidden');
+        list.innerHTML = hooks.map(h => `
+          <div class="flex justify-between items-center px-4 sm:px-6 py-3 text-sm">
+            <div class="min-w-0 flex-1 mr-3">
+              <div class="text-white font-mono text-xs truncate">${esc(h.url)}</div>
+              <div class="text-[10px] text-gray-600 mt-0.5">${h.events.join(', ')}</div>
+            </div>
+            <div class="flex gap-2 shrink-0">
+              <button onclick="testWebhook('${h.id}')" class="text-gray-600 hover:text-emerald-400 text-xs transition">test</button>
+              <button onclick="deleteWebhook('${h.id}')" class="text-gray-600 hover:text-red-400 text-xs transition">remove</button>
+            </div>
+          </div>
+        `).join('');
+      }
+
+      window.createWebhook = async () => {
+        const url = document.getElementById('webhook-url').value.trim();
+        if (!url) { toast('Enter a webhook URL', 'error'); return; }
+
+        const events = [...document.querySelectorAll('.webhook-event:checked')].map(e => e.value);
+        if (events.length === 0) { toast('Select at least one event', 'error'); return; }
+
+        const token = await getToken();
+        if (!token) return;
+
+        const res = await fetch('/api/webhooks', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url, events })
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          toast('Failed: ' + (err.error || res.statusText), 'error');
+          return;
+        }
+
+        toast('Webhook added', 'success');
+        document.getElementById('webhook-url').value = '';
+        loadWebhooks();
+      };
+
+      window.testWebhook = async (id) => {
+        const token = await getToken();
+        if (!token) return;
+        const res = await fetch(`/api/webhooks/${id}/test`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+        if (res.ok) toast('Test webhook sent', 'success');
+        else toast('Webhook test failed', 'error');
+      };
+
+      window.deleteWebhook = async (id) => {
+        const token = await getToken();
+        if (!token) return;
+        await fetch(`/api/webhooks/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+        toast('Webhook removed', 'info');
+        loadWebhooks();
       };
     })();
   </script>
