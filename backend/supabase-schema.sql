@@ -43,11 +43,14 @@ create table if not exists agents (
   tenant_id uuid not null references tenants(id) on delete cascade,
   name text not null,
   status text not null default 'idle',
-  parent_agent_id text,
   last_heartbeat bigint,
   created_at timestamptz not null default now(),
   primary key (id, tenant_id)
 );
+
+-- Add parent_agent_id if table already existed without it
+alter table agents add column if not exists parent_agent_id text;
+
 create index if not exists idx_agents_tenant on agents(tenant_id);
 create index if not exists idx_agents_parent on agents(parent_agent_id, tenant_id);
 
@@ -79,9 +82,12 @@ create table if not exists budget_rules (
   max_cost double precision not null,
   action text not null default 'kill',
   enabled boolean not null default true,
-  created_at timestamptz not null default now(),
-  unique(tenant_id, agent_id)
+  created_at timestamptz not null default now()
 );
+
+-- Unique constraint that treats NULL agent_id correctly (tenant-wide default)
+create unique index if not exists idx_budget_rules_tenant_agent
+  on budget_rules (tenant_id, coalesce(agent_id, '__tenant_default__'));
 
 create table if not exists webhooks (
   id uuid primary key default uuid_generate_v4(),

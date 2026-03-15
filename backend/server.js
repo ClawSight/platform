@@ -558,14 +558,22 @@ app.post('/api/budgets', authenticateUser, async (req, res) => {
   const validActions = ['kill', 'pause', 'alert_only'];
   const safeAction = validActions.includes(action) ? action : 'kill';
 
+  // Delete existing rule for this tenant+agent combo, then insert new one
+  const deleteQuery = supabase.from('budget_rules')
+    .delete()
+    .eq('tenant_id', tenantId);
+  if (agentId) deleteQuery.eq('agent_id', agentId);
+  else deleteQuery.is('agent_id', null);
+  await deleteQuery;
+
   const { data, error } = await supabase.from('budget_rules')
-    .upsert({
+    .insert({
       tenant_id: tenantId,
       agent_id: agentId || null,
       max_cost: maxCost,
       action: safeAction,
       enabled: true
-    }, { onConflict: 'tenant_id,agent_id' })
+    })
     .select()
     .single();
 
@@ -700,14 +708,20 @@ app.post('/api/agents/register', authenticateApiKey, async (req, res) => {
     const validActions = ['kill', 'pause', 'alert_only'];
     const action = validActions.includes(budget.action) ? budget.action : 'kill';
 
+    // Delete existing rule for this agent, then insert
+    await supabase.from('budget_rules')
+      .delete()
+      .eq('tenant_id', tenantId)
+      .eq('agent_id', safeId);
+
     const { data } = await supabase.from('budget_rules')
-      .upsert({
+      .insert({
         tenant_id: tenantId,
         agent_id: safeId,
         max_cost: budget.maxCost,
         action,
         enabled: true
-      }, { onConflict: 'tenant_id,agent_id' })
+      })
       .select()
       .single();
 
