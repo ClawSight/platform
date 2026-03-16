@@ -43,6 +43,7 @@ create table if not exists agents (
   tenant_id uuid not null references tenants(id) on delete cascade,
   name text not null,
   status text not null default 'idle',
+  parent_agent_id text,
   last_heartbeat bigint,
   created_at timestamptz not null default now(),
   primary key (id, tenant_id)
